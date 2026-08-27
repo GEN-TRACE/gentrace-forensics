@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint-test:
+    name: lint · type · test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Ruff (lint)
+        run: ruff check src tests
+      - name: Ruff (format 확인)
+        run: ruff format --check src tests
+      - name: Mypy (타입)
+        run: mypy src
+      - name: Pytest
+        run: pytest
+
+  security:
+    name: security scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip setuptools
+          pip install -e ".[dev]"
+      - name: Bandit (소스 취약 패턴)
+        run: bandit -c pyproject.toml -r src
+      - name: pip-audit (의존성 CVE)
+        # 상위 라이브러리에서 새 CVE가 공개되면 우리 변경과 무관하게 실패할 수 있어
+        # 경고만 남기고 빌드는 막지 않는다. 결과는 PR 체크의 로그에서 확인.
+        continue-on-error: true
+        # --skip-editable: 로컬 패키지(gentrace-forensics) 자체는 감사 대상에서 제외
+        run: pip-audit --desc --skip-editable
+
+  guard:
+    name: evidence / secret guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: 증거 이미지·캐시 원본 커밋 차단
+        run: |
+          hits=$(git ls-files | grep -iE '\.(e01|e0[0-9]|dd|raw)$|(^|/)Cache_Data/|(^|/)f_[0-9a-f]{6}$' || true)
+          if [ -n "$hits" ]; then
+            echo "::error::증거/캐시 원본으로 보이는 파일이 커밋됨:"
+            echo "$hits"
+            exit 1
+          fi
+      - name: 대용량 파일 차단 (>5MB)
+        run: |
+          big=""
+          while IFS= read -r f; do
+            if [ -f "$f" ]; then
+              sz=$(wc -c <"$f")
+              if [ "$sz" -gt 5242880 ]; then
+                big="$big$f ($sz bytes)"$'\n'
+              fi
+            fi
+          done < <(git ls-files)
+          if [ -n "$big" ]; then
+            echo "::error::5MB 초과 파일 커밋됨. samples/private/ 또는 외부 저장소 사용:"
+            echo "$big"
+            exit 1
+          fi
+      - name: 비밀키·토큰 패턴 스캔
+        run: |
+          # 흔한 자격증명 패턴만 best-effort로 본다. 정밀 스캔은 저장소 설정의
+          # GitHub secret scanning(무료, public 저장소) 또는 gitleaks 도입으로 보강.
+          pat='(AKIA[0-9A-Z]{16}|ghp_[0-9A-Za-z]{36}|gho_[0-9A-Za-z]{36}|sk-[A-Za-z0-9]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|xox[baprs]-[0-9A-Za-z-]{10,})'
+          hits=$(git grep -nIE "$pat" -- ':!*.lock' || true)
+          if [ -n "$hits" ]; then
+            echo "::error::비밀키/토큰으로 보이는 문자열이 커밋됨:"
+            echo "$hits"
+            exit 1
+          fi

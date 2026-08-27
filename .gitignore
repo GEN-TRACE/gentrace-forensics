@@ -1,0 +1,58 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.venv/
+venv/
+env/
+ENV/
+
+# --- Tooling ---
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+
+# --- Editors / OS ---
+.idea/
+.vscode/
+.DS_Store
+
+# 로컬 에디터/도구용 개인 노트 (팀 규칙은 CONTRIBUTING.md 참조)
+/CLAUDE.md
+/AGENTS.md
+/.cursorrules
+
+# --- 증거 이미지 · 캐시 원본 (절대 커밋 금지) ---
+*.E01
+*.E0*
+*.e01
+*.e0*
+*.dd
+*.raw
+samples/private/
+outputs/
+*.db
+*.sqlite
+*.sqlite3
+*.jsonl
+*.parquet
