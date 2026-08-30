@@ -360,10 +360,10 @@ CodeQL / 증거·비밀 파일 가드(E01·캐시 원본·대용량·API 키 커
 ## 9. CODEOWNERS
 
 ```
-/src/gentrace_forensics/acquisition/     @<예은 GitHub ID>
+/src/gentrace_forensics/acquisition/     @kimyeeun21
 /src/gentrace_forensics/classification/  @bbibbi0425
-/src/gentrace_forensics/normalization/   @<신아 GitHub ID>
-/src/gentrace_forensics/schemas/         @bbibbi0425 @<예은 GitHub ID> @<신아 GitHub ID>
+/src/gentrace_forensics/normalization/   @shinAh23
+/src/gentrace_forensics/schemas/         @bbibbi0425 @kimyeeun21 @shinAh23
 ```
 
-예은·신아의 GitHub ID는 아직 플레이스홀더다. 실제 계정으로 교체할 것.
+예은 `@kimyeeun21`, 지민 `@bbibbi0425`, 신아 `@shinAh23`.

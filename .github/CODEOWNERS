@@ -1,7 +1,6 @@
 # 각 단계 폴더는 담당자가 소유한다. schemas/ 는 셋 다 리뷰한다.
-# TODO: <예은 GitHub ID>, <신아 GitHub ID> 를 실제 계정으로 교체.
 
-/src/gentrace_forensics/acquisition/     @yeeun-github-id
+/src/gentrace_forensics/acquisition/     @kimyeeun21
 /src/gentrace_forensics/classification/  @bbibbi0425
-/src/gentrace_forensics/normalization/   @sina-github-id
-/src/gentrace_forensics/schemas/         @bbibbi0425 @yeeun-github-id @sina-github-id
+/src/gentrace_forensics/normalization/   @shinAh23
+/src/gentrace_forensics/schemas/         @bbibbi0425 @kimyeeun21 @shinAh23
