@@ -57,17 +57,45 @@ src/gentrace_forensics/
 
 ## 설치
 
-```bash
-python -m pip install -e ".[dev]"
+E01 이미지를 여는 데 네이티브 라이브러리(`libewf`, `libtsk`)가 필요하다.
+**Windows 사용자는 WSL-Ubuntu** 에서 실행한다.
 
-# 획득 단계까지 (pytsk3 / libewf-python 빌드 필요)
-python -m pip install -e ".[dev,acquisition]"
+### Windows (WSL-Ubuntu) — 자동
 
-# ccl_chromium_reader 대조·검증
-python -m pip install -e ".[dev,reference]"
+```powershell
+wsl --install -d Ubuntu        # PowerShell(관리자), 최초 1회. 재부팅 후 WSL 진입
 ```
 
-분류·정규화 단계는 `acquisition` extras 없이도 개발·테스트 가능하다.
+```bash
+git clone https://github.com/GEN-TRACE/gentrace-forensics.git
+cd gentrace-forensics
+sed -i 's/\r$//' setup_wsl.sh && bash ./setup_wsl.sh
+source ~/venvs/gentrace/bin/activate
+```
+
+### Windows (WSL-Ubuntu) — 수동
+
+```bash
+sudo apt update
+sudo apt install -y python3-venv python3-dev build-essential pkg-config \
+    libtsk-dev libewf-dev libbde-dev libfsntfs-dev
+
+python3 -m venv --prompt gentrace ~/venvs/gentrace
+source ~/venvs/gentrace/bin/activate
+pip install --upgrade pip setuptools wheel
+pip install -e ".[dev,acquisition]"
+```
+
+### 분류·정규화만 (E01 안 다룸)
+
+`acquisition` extras 없이 순수 파이썬으로 어디서든:
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+> 대조·검증용 `ccl_chromium_reader` 는 `pip install -e ".[dev,reference]"`.
 
 ## 실행
 
