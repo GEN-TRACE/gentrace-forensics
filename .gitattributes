@@ -1,0 +1,20 @@
+# 모든 텍스트 파일은 저장소에서 LF. Windows 체크아웃 시에도 셸 스크립트가 안 깨짐.
+* text=auto eol=lf
+
+# 셸 스크립트는 반드시 LF + 실행 권한
+*.sh text eol=lf
+
+# 바이너리 (diff/줄바꿈 처리 안 함)
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.webp binary
+*.gif  binary
+*.pdf  binary
+*.mp3  binary
+*.mp4  binary
+*.m4a  binary
+*.zip  binary
+*.E01  binary
+*.db   binary
+*.sqlite binary

@@ -9,11 +9,17 @@ git 처음이어도 이 순서만 따라 하면 된다. **`main`에서 직접 �
 ```bash
 git clone https://github.com/GEN-TRACE/gentrace-forensics.git
 cd gentrace-forensics
-python -m pip install -e ".[dev]"
+
+# Windows(WSL-Ubuntu): sed -i 's/\r$//' setup_wsl.sh && bash ./setup_wsl.sh
+# 분류·정규화만: python3 -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]"
+# 자세한 건 README "설치"
 
 git config user.name  "본인 이름"
 git config user.email "GitHub에 등록된 이메일"
 ```
+
+Windows(WSL)에서 클론하면 셸 스크립트에 CRLF가 붙을 수 있어 `sed -i 's/\r$//'` 를 한 번 실행한다.
+`.gitattributes` 가 이후 체크아웃부터는 LF를 강제한다.
 
 ---
 
