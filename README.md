@@ -40,6 +40,21 @@ Common Schema (SQLite / JSONL) → 타임라인, 통합 검색, 상관분석    
 - 커밋 메시지는 **영어**, 형식 `[ <type> ] <설명>` (예: `[ chore ] scaffold project structure`). `type` = `feat`/`fix`/`chore`/`docs`/`test`/`refactor`. 자세한 규칙은 [CONTRIBUTING.md](CONTRIBUTING.md) 8절.
 - 실제 증거 이미지·캐시 원본은 **절대 커밋하지 않는다**. `samples/`에는 익명화된 소형 테스트 샘플만 둔다.
 
+## 프로젝트 구조
+
+```
+src/gentrace_forensics/
+├── schemas/          # 단계 간 데이터 계약 (Pydantic 모델)
+├── acquisition/      # 1. E01 → Cache_Data 추출         (예은)
+├── classification/   # 2. blockfile 파싱 + 서비스 분류   (지민)
+│   ├── blockfile/    #    Chrome blockfile 캐시 파서
+│   └── services/     #    서비스별 Upload/Generated 분류기
+├── normalization/    # 3. 공통 스키마 변환·검증·저장      (신아)
+└── cli.py            # gentrace acquire / classify / normalize / run
+```
+
+파일 단위 상세는 [CONTRIBUTING.md](CONTRIBUTING.md) 5절.
+
 ## 설치
 
 ```bash
