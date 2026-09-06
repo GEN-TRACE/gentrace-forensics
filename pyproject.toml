@@ -21,7 +21,8 @@ dependencies = [
 
 [project.optional-dependencies]
 acquisition = ["libewf-python", "pytsk3"]
-reference   = ["ccl-chromium-reader"]
+# ccl_chromium_reader 는 PyPI 미배포 → GitHub 에서 설치 (blockfile 파서 참조·교차검증용)
+reference   = ["ccl_chromium_reader @ git+https://github.com/cclgroupltd/ccl_chromium_reader"]
 dev         = ["pytest", "ruff", "mypy", "bandit", "pip-audit"]
 
 [project.scripts]
@@ -30,9 +31,18 @@ gentrace = "gentrace_forensics.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/gentrace_forensics"]
 
+[tool.hatch.metadata]
+# reference extra 가 git+ 직접 참조를 쓰므로 필요
+allow-direct-references = true
+
 [tool.ruff]
 target-version = "py311"
 line-length = 100
+
+[tool.pytest.ini_options]
+# editable 설치가 실패해도(구버전 pip 등) 테스트는 src/ 를 찾을 수 있게
+pythonpath = ["src"]
+testpaths = ["tests"]
 
 [tool.mypy]
 python_version = "3.11"

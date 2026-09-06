@@ -92,10 +92,12 @@ pip install -e ".[dev,acquisition]"
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
+pip install --upgrade pip          # 구버전 pip 는 editable 설치가 깨짐
 pip install -e ".[dev]"
 ```
 
-> 대조·검증용 `ccl_chromium_reader` 는 `pip install -e ".[dev,reference]"`.
+> blockfile 파서 대조·검증용 `ccl_chromium_reader`(GitHub 설치)까지:
+> `pip install -e ".[dev,reference]"` — git 이 필요하다.
 
 ## 실행
 
