@@ -11,7 +11,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Sequence
 
 from gentrace_forensics.classification.blockfile.parser import ParsedCacheEntry
 from gentrace_forensics.classification.services.base import (
@@ -24,9 +24,9 @@ class Veo3Classifier(ServiceClassifier):
     service = "veo3"
 
     def matches(self, entry: ParsedCacheEntry) -> bool:
-        raise NotImplementedError
+        return False  # TODO(PR4): 구현
 
     def classify(
-        self, entry: ParsedCacheEntry, *, context: Iterable[ParsedCacheEntry]
+        self, entry: ParsedCacheEntry, *, entries: Sequence[ParsedCacheEntry]
     ) -> Classification:
-        raise NotImplementedError
+        return Classification("other")
