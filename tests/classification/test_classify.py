@@ -104,6 +104,10 @@ def test_empty_body_not_written(source_cache: AcquiredCache, tmp_path: Path) -> 
 # --- 통합 (로컬 캐시 픽스처) ---
 
 
+_VALID_SERVICES = {"chatgpt", "claude", "gemini", "veo3", "elevenlabs", "unknown"}
+_VALID_KINDS = {"file_upload", "generated_file", "conversation", "unmatched", "other"}
+
+
 def test_classify_local_cache_dir(cache_fixture_dir: Path) -> None:
     out = classify_cache_dir(cache_fixture_dir)
     assert len(out) > 100
@@ -111,5 +115,7 @@ def test_classify_local_cache_dir(cache_fixture_dir: Path) -> None:
         assert isinstance(c, ClassifiedEntry)
         assert c.entry_id
         assert c.source_cache.source_path
-    # PR 4~6 전이므로 아직 전부 unknown
-    assert {c.service for c in out} <= {"unknown"}
+        assert c.service in _VALID_SERVICES
+        assert c.artifact_kind in _VALID_KINDS
+    # 분류되지 않은 잡다한 트래픽이 여전히 대다수
+    assert sum(c.service == "unknown" for c in out) > len(out) // 2
