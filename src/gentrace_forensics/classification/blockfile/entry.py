@@ -8,11 +8,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from gentrace_forensics.classification.blockfile.addr import CacheAddr
+from gentrace_forensics.classification.blockfile.parser import HttpResponseInfo
 from gentrace_forensics.classification.blockfile.structs import EntryStore
+
+__all__ = ["CacheEntry", "CacheKey", "HttpResponseInfo", "read_block_data", "read_entry"]
 
 
 @dataclass
@@ -29,15 +32,6 @@ class CacheKey:
     @property
     def url(self) -> str:
         raise NotImplementedError
-
-
-@dataclass
-class HttpResponseInfo:
-    status: int | None
-    headers: dict[str, str] = field(default_factory=dict)
-
-    def get(self, name: str) -> str | None:
-        return self.headers.get(name.lower())
 
 
 @dataclass
