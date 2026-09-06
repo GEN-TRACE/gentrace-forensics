@@ -31,6 +31,10 @@ gentrace = "gentrace_forensics.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/gentrace_forensics"]
 
+[tool.hatch.metadata]
+# reference extra 가 git+ 직접 참조를 쓰므로 필요
+allow-direct-references = true
+
 [tool.ruff]
 target-version = "py311"
 line-length = 100
