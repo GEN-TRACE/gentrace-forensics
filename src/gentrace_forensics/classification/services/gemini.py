@@ -12,7 +12,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Sequence
 
 from gentrace_forensics.classification.blockfile.parser import ParsedCacheEntry
 from gentrace_forensics.classification.services.base import (
@@ -25,15 +25,15 @@ class GeminiClassifier(ServiceClassifier):
     service = "gemini"
 
     def matches(self, entry: ParsedCacheEntry) -> bool:
-        raise NotImplementedError
+        return False  # TODO(PR5): 구현
 
     def classify(
-        self, entry: ParsedCacheEntry, *, context: Iterable[ParsedCacheEntry]
+        self, entry: ParsedCacheEntry, *, entries: Sequence[ParsedCacheEntry]
     ) -> Classification:
-        raise NotImplementedError
+        return Classification("other")
 
     def pair_entries(
-        self, entries: Iterable[ParsedCacheEntry]
+        self, entries: Sequence[ParsedCacheEntry]
     ) -> list[tuple[ParsedCacheEntry | None, ParsedCacheEntry | None]]:
         """(upload, generated) 페어 목록. 한쪽이 None 이면 unmatched."""
         raise NotImplementedError
