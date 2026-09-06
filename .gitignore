@@ -51,6 +51,10 @@ htmlcov/
 *.raw
 samples/private/
 outputs/
+# 로컬 개발용 Chrome 캐시 픽스처 (예은 획득 산출물 대용)
+/Cache_Data/
+/Cache_Data.zip
+Cache/Cache_Data/
 *.db
 *.sqlite
 *.sqlite3
