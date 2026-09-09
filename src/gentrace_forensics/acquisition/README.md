@@ -14,6 +14,8 @@
    - 전체 NTFS 재귀 탐색은 하지 않는다. 위 경로 패턴으로 직접 접근.
 4. `index`, `data_*`, `f_*` 전부를 원래 디렉터리 구조 그대로 추출 — `pytsk3`, `pathlib`, `hashlib` → [extract.py](extract.py)
    - 파일별 NTFS 시간정보, inode, 크기, SHA-256 기록
+   - 기존 출력을 덮어쓰지 않고 실패 시 해당 프로필의 불완전한 출력 제거
+   - `partition_<offset>/Users/.../<profile>/acquired.json`을 프로필별로 생성
 
 대안: `dfVFS`로 1~4단계 통합 처리 가능. 우선은 pyewf + pytsk3로 시작.
 
