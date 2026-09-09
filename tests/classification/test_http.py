@@ -37,6 +37,12 @@ class TestDecompress:
         truncated = gzip.compress(b"x" * 1000)[:20]
         assert http.decompress(truncated, "gzip") == truncated
 
+    def test_truncated_gzip_records_warning(self) -> None:
+        truncated = gzip.compress(b"x" * 1000)[:20]
+        body, warnings = http.decompress_with_warnings(truncated, "gzip")
+        assert body == truncated
+        assert warnings == ["gzip decompression failed: EOFError"]
+
     def test_stacked_encodings(self) -> None:
         raw = b"double wrapped"
         assert http.decompress(gzip.compress(raw), "identity, gzip") == raw
@@ -45,6 +51,35 @@ class TestDecompress:
     def test_brotli(self) -> None:
         raw = b"brotli payload" * 10
         assert http.decompress(http.brotli.compress(raw), "br") == raw
+
+    @pytest.mark.skipif(http.zstandard is None, reason="zstandard 미설치")
+    def test_zstandard(self) -> None:
+        raw = b"zstandard payload" * 20
+        compressed = http.zstandard.ZstdCompressor().compress(raw)
+        body, warnings = http.decompress_with_warnings(compressed, "zstd")
+        assert body == raw
+        assert warnings == []
+
+    @pytest.mark.skipif(http.zstandard is None, reason="zstandard 미설치")
+    def test_zstandard_without_content_size(self) -> None:
+        raw = b"streamed zstandard payload" * 20
+        compressor = http.zstandard.ZstdCompressor(write_content_size=False)
+        compressed = compressor.compress(raw)
+        body, warnings = http.decompress_with_warnings(compressed, "zstd")
+        assert body == raw
+        assert warnings == []
+
+    @pytest.mark.parametrize("encoding", ["dcb", "dcz", "br-d", "zstd-d"])
+    def test_dictionary_encoding_requires_dictionary(self, encoding: str) -> None:
+        raw = b"dictionary-compressed"
+        body, warnings = http.decompress_with_warnings(raw, encoding)
+        assert body == raw
+        assert warnings == [f"{encoding} decompression requires an external dictionary"]
+
+    def test_unknown_encoding_records_warning(self) -> None:
+        body, warnings = http.decompress_with_warnings(b"payload", "weird-thing")
+        assert body == b"payload"
+        assert warnings == ["unsupported content encoding: weird-thing"]
 
 
 class TestContentDisposition:
