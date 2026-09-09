@@ -23,7 +23,9 @@ Chromium `net/disk_cache/blockfile/` 의 `disk_format.h`(구조체 정의), `add
 5. Stream 0(HTTP 응답 헤더)에서 `Content-Type`, `Content-Encoding`, 실제 URL 추출
    - 캐시 키가 `1/0/https://…` 형태로 접두어가 붙는 경우가 있으므로 키 전체를 URL로 간주하지 않는다.
      `ccl_chromium_reader` 의 `CacheKey` 클래스 방식 참고.
-6. Stream 1(응답 본문) 추출. 작은 본문은 블록 내부, 큰 본문은 `f_XXXXXX`. gzip/zlib/Brotli 해제 → [http.py](http.py)
+6. Stream 1(응답 본문) 추출. 작은 본문은 블록 내부, 큰 본문은 `f_XXXXXX`.
+   gzip/deflate/Brotli/Zstandard 해제 → [http.py](http.py)
+   - 공유 사전이 필요한 `dcb`/`dcz`는 사전 없이는 해제할 수 없으므로 원문을 보존하고 경고를 기록한다.
 7. [blockfile/parser.py](blockfile/parser.py) 로 통합
 8. 같은 캐시 폴더를 ChromeCacheView / Hindsight 와 대조. 불일치는 헥스 재확인.
 

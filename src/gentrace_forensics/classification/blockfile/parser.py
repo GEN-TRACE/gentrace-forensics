@@ -66,7 +66,7 @@ class ParsedCacheEntry:
 
 
 def _to_parsed(raw: _ccl_backend.RawCacheEntry) -> ParsedCacheEntry:
-    body = http.decompress(raw.stored_body, raw.content_encoding)
+    body, decode_warnings = http.decompress_with_warnings(raw.stored_body, raw.content_encoding)
     return ParsedCacheEntry(
         cache_key=raw.cache_key,
         url=raw.url,
@@ -84,7 +84,7 @@ def _to_parsed(raw: _ccl_backend.RawCacheEntry) -> ParsedCacheEntry:
             "request_time_us": raw.request_time_us,
             "response_time_us": raw.response_time_us,
         },
-        warnings=list(raw.warnings),
+        warnings=[*raw.warnings, *decode_warnings],
     )
 
 

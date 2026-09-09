@@ -18,7 +18,7 @@ E01 이미지
 Cache_Data 원본 (index, data_0~3, f_XXXXXX) + 출처 메타데이터        [AcquiredCache]
    │  (2) 분류 – 지민      src/gentrace_forensics/classification/
    ▼
-캐시 엔트리 목록 (URL, Content-Type, 본문, 서비스, upload/generated) [ClassifiedEntry]
+캐시 엔트리 목록 (URL, Content-Type, 압축 해제 본문, 서비스, upload/generated) [ClassifiedEntry]
    │  (3) 정규화 – 신아    src/gentrace_forensics/normalization/
    ▼
 Common Schema (SQLite / JSONL) → 타임라인, 통합 검색, 상관분석        [NormalizedArtifact]
@@ -113,6 +113,7 @@ gentrace run       --image disk.E01              --out outputs/   # 전체 파�
 ## 검증 기준
 
 - 분류 파서 결과는 ChromeCacheView, Hindsight 결과와 대조한다. 엔트리 수, URL, Content-Type, 크기가 일치해야 한다.
+- HTTP 본문은 gzip, deflate, Brotli, Zstandard를 해제한다. 외부 공유 사전이 필요한 `dcb`/`dcz`는 원문을 보존하고 파싱 경고를 기록한다.
 - 모든 출력 레코드는 원본 E01 → 파일 → 오프셋까지 역추적 가능해야 한다.
 - 추측으로 채우는 필드는 없다. 모르면 `None`.
 
