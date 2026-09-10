@@ -28,10 +28,11 @@ class _FakeImage:
 class _FakeFs:
     def __init__(self, fs_type: int) -> None:
         self.info = SimpleNamespace(ftype=fs_type)
-        self.exited = False
+        self.exit_calls = 0
 
     def exit(self) -> None:
-        self.exited = True
+        self.exit_calls += 1
+        raise RuntimeError("FS_Info.exit is intentionally disabled")
 
 
 def _install_fake_pytsk3(
@@ -110,7 +111,7 @@ def test_list_partitions_returns_allocated_entries_and_probes_ntfs(
             is_ntfs=True,
         ),
     ]
-    assert all(fs.exited for fs in opened)
+    assert all(fs.exit_calls == 0 for fs in opened)
 
 
 def test_list_partitions_supports_ntfs_without_partition_table(
@@ -131,7 +132,7 @@ def test_list_partitions_supports_ntfs_without_partition_table(
             is_ntfs=True,
         )
     ]
-    assert opened[0].exited is True
+    assert opened[0].exit_calls == 0
 
 
 def test_list_partitions_rejects_image_without_partition_table_or_ntfs(
@@ -176,16 +177,18 @@ def test_open_fs_returns_ntfs_and_leaves_lifetime_to_caller(
     fs = open_fs(_FakeImage(), 1_048_576)
 
     assert fs is opened[0]
-    assert fs.exited is False
+    assert fs.exit_calls == 0
 
 
-def test_open_fs_closes_and_rejects_non_ntfs(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_open_fs_does_not_call_disabled_exit_for_non_ntfs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     opened = _install_fake_pytsk3(monkeypatch, filesystems={512: 20})
 
     with pytest.raises(FilesystemDiscoveryError, match="is not NTFS"):
         open_fs(_FakeImage(), 512)
 
-    assert opened[0].exited is True
+    assert opened[0].exit_calls == 0
 
 
 def test_open_fs_wraps_native_open_error(monkeypatch: pytest.MonkeyPatch) -> None:
