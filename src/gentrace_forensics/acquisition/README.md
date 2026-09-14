@@ -9,9 +9,15 @@
    - `E01..E99`, `EAA..EZZ` 분할 세그먼트를 순서대로 탐색하고 누락·중복을 검증
    - 분할·압축 방식과 무관하게 복원된 논리 디스크 전체 바이트의 SHA-256 계산
 2. GPT/MBR 파티션 순회, Windows NTFS 파티션 식별, 오프셋 계산 — `pytsk3.Volume_Info`, `pytsk3.FS_Info` → [filesystem.py](filesystem.py)
+   - 비활성화된 `FS_Info.exit()`를 직접 호출하지 않고 Python 객체 수명으로 네이티브 자원을 관리
+   - 할당된 파티션만 섹터 크기 기준의 byte offset/length로 변환
+   - 파티션 설명 문자열이 아니라 실제 파일시스템 형식으로 NTFS 여부 확인
+   - 파티션 테이블이 없는 단일 NTFS 이미지(offset 0)도 지원
 3. `/Users/*/AppData/Local/Google/Chrome/User Data/` 아래 `Default`, `Profile *`, `Guest Profile` 탐색,
    각 프로필의 `Cache/Cache_Data` 존재 확인 — `pytsk3`, `fnmatch`, `re`
    - 전체 NTFS 재귀 탐색은 하지 않는다. 위 경로 패턴으로 직접 접근.
+   - Windows 사용자별 `Default`, 숫자형 `Profile N`, `Guest Profile`을 결정적 순서로 반환
+   - `Last Version`을 우선 사용하고, 없으면 사용자/시스템 설치 경로의 `chrome.exe`로 버전 확인
 4. `index`, `data_*`, `f_*` 전부를 원래 디렉터리 구조 그대로 추출 — `pytsk3`, `pathlib`, `hashlib` → [extract.py](extract.py)
    - 파일별 NTFS 시간정보, inode, 크기, SHA-256 기록
    - 기존 출력을 덮어쓰지 않고 실패 시 해당 프로필의 불완전한 출력 제거
