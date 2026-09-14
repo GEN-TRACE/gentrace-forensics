@@ -12,13 +12,41 @@ from pathlib import Path
 
 import pytest
 
+from gentrace_forensics.classification.blockfile._ccl_backend import RawCacheEntry
 from gentrace_forensics.classification.blockfile.parser import (
     ParsedCacheEntry,
+    _to_parsed,
     parse_cache_dir,
 )
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _UNSAFE = re.compile(r"[\x00/\\]")
+
+
+def test_decode_warning_is_preserved_on_parsed_entry() -> None:
+    raw = RawCacheEntry(
+        cache_key="https://example.test/data",
+        url="https://example.test/data",
+        http_status=200,
+        headers={"content-encoding": "dcb"},
+        stored_body=b"dictionary-compressed",
+        stored_body_size=21,
+        content_encoding="dcb",
+        source_file="data_1",
+        source_offset=0,
+        entry_hash=1,
+        entry_state="normal",
+        creation_time_us=None,
+        warnings=["existing warning"],
+    )
+
+    parsed = _to_parsed(raw)
+
+    assert parsed.body == raw.stored_body
+    assert parsed.warnings == [
+        "existing warning",
+        "dcb decompression requires an external dictionary",
+    ]
 
 
 @pytest.fixture(scope="module")
