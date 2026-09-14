@@ -58,22 +58,16 @@ def _is_ntfs(fs: Any, pytsk3: Any) -> bool:
     return any(ntfs_type is not None and fs_type == ntfs_type for ntfs_type in ntfs_types)
 
 
-def _close_fs(fs: Any) -> None:
-    exit_method = getattr(fs, "exit", None)
-    if callable(exit_method):
-        exit_method()
-
-
 def _probe_ntfs(img: Any, offset: int, pytsk3: Any) -> bool:
     try:
         fs = pytsk3.FS_Info(img, offset=offset)
     except OSError:  # pytsk3는 손상·비지원 파일시스템을 OSError로 보고한다.
         return False
 
-    try:
-        return _is_ntfs(fs, pytsk3)
-    finally:
-        _close_fs(fs)
+    # pytsk3.FS_Info.exit()는 호스트 인터프리터를 종료하던 과거 동작 때문에
+    # 의도적으로 비활성화되어 있다. 지역 참조가 해제될 때 네이티브 객체의
+    # 수명도 Python 바인딩에 맡긴다.
+    return _is_ntfs(fs, pytsk3)
 
 
 def _whole_image_partition(img: Any, pytsk3: Any) -> Partition | None:
@@ -152,8 +146,8 @@ def list_partitions(img: Any) -> list[Partition]:
 def open_fs(img: Any, offset: int) -> Any:
     """byte offset의 NTFS를 열어 ``pytsk3.FS_Info``로 반환한다.
 
-    반환된 객체의 수명은 호출자가 관리한다. 더 이상 사용하지 않을 때
-    객체가 제공하는 ``exit()``를 호출해야 한다.
+    ``FS_Info.exit()``는 호출하지 않는다. 반환된 객체의 참조 수명에 따라
+    Python 바인딩이 네이티브 자원을 정리한다.
     """
     if offset < 0:
         raise ValueError("filesystem offset must be non-negative")
@@ -167,7 +161,6 @@ def open_fs(img: Any, offset: int) -> Any:
         ) from exc
 
     if not _is_ntfs(fs, pytsk3):
-        _close_fs(fs)
         raise FilesystemDiscoveryError(f"filesystem at byte offset {offset} is not NTFS")
     return fs
 
