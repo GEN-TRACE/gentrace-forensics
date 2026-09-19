@@ -12,6 +12,8 @@ import hashlib
 import struct
 from pathlib import Path
 
+import pytest
+
 from gentrace_forensics.classification.blockfile import entry
 from gentrace_forensics.classification.blockfile._ccl_backend import iter_raw_entries
 
@@ -82,6 +84,8 @@ def test_cache_key_range_and_sparse_suffix_stripped() -> None:
 
 
 def test_iter_entries_matches_reference_implementation(cache_fixture_dir: Path) -> None:
+    pytest.importorskip("ccl_chromium_reader", reason='pip install -e ".[reference]" 필요')
+
     mine = {}
     for e in entry.iter_entries(cache_fixture_dir):
         info = e.response_info(cache_fixture_dir)

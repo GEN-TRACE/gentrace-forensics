@@ -18,12 +18,11 @@ from __future__ import annotations
 import re
 import struct
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from gentrace_forensics.classification.blockfile import index
 from gentrace_forensics.classification.blockfile.addr import CacheAddr, FileType
-from gentrace_forensics.classification.blockfile.parser import HttpResponseInfo
 from gentrace_forensics.classification.blockfile.structs import (
     BLOCK_HEADER_SIZE,
     ENTRY_STORE_SIZE,
@@ -54,6 +53,21 @@ _SPARSE_SUFFIX = re.compile(r":[0-9a-f]{6,}:\d+$")
 # net/http/http_response_info.cc CachedMetadataFlags / CachedMetadataExtraFlags
 _RESPONSE_INFO_HAS_EXTRA_FLAGS = 1 << 31
 _RESPONSE_EXTRA_INFO_HAS_ORIGINAL_RESPONSE_TIME = 1 << 2
+
+
+@dataclass
+class HttpResponseInfo:
+    """캐시 엔트리 Stream 0 (HTTP 응답 메타데이터)."""
+
+    status: int | None
+    headers: dict[str, str] = field(default_factory=dict)
+
+    def get(self, name: str) -> str | None:
+        return self.headers.get(name.lower())
+
+    @property
+    def content_type(self) -> str | None:
+        return self.get("content-type")
 
 
 @dataclass
