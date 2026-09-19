@@ -55,22 +55,32 @@ class CacheAddr:
 
     @property
     def external_file_number(self) -> int:
-        """f_<hex> 파일 번호 (EXTERNAL 전용)."""
-        raise NotImplementedError
+        """f_<hex> 파일 번호 (EXTERNAL 전용). addr.h kFileNameMask (하위 28비트)."""
+        return self.raw & 0x0FFFFFFF
 
     @property
     def block_file_number(self) -> int:
-        """data_<n> 파일 번호 (BLOCK 전용)."""
-        raise NotImplementedError
+        """data_<n> 파일 번호 (BLOCK 전용). addr.h kFileSelectorMask."""
+        return (self.raw & 0x00FF0000) >> 16
 
     @property
     def block_number(self) -> int:
-        raise NotImplementedError
+        """BLOCK 파일 내 시작 블록 인덱스. addr.h kStartBlockMask."""
+        return self.raw & 0x0000FFFF
 
     @property
     def num_blocks(self) -> int:
-        raise NotImplementedError
+        """연속으로 차지하는 블록 수. addr.h kNumBlocksMask (저장값 = 실제 수 - 1)."""
+        return ((self.raw & 0x03000000) >> 24) + 1
+
+    @property
+    def block_size(self) -> int:
+        """BLOCK 파일 하나의 블록 크기 (바이트). EXTERNAL 에는 없음."""
+        try:
+            return BLOCK_SIZE_FOR_TYPE[self.file_type]
+        except KeyError as exc:
+            raise ValueError(f"{self.file_type!r} has no fixed block size") from exc
 
     def file_offset(self, header_size: int) -> int:
         """BLOCK 파일 내 바이트 오프셋 = header_size + block_number * block_size."""
-        raise NotImplementedError
+        return header_size + self.block_number * self.block_size
