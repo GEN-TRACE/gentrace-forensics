@@ -78,8 +78,12 @@ class CacheKey:
       `<credential_key>/<upload_id>/<url 또는 _dk_...>`  (2021-09 이후 '현재' 형식)
       `<upload_id>/<url 또는 _dk_...>`                    (이전 형식)
       위 접두어가 없으면 키 전체가 URL.
-    `_dk_` 접두어는 더블키(사이트 파티셔닝) 캐시:
-      `_dk_<top_frame_site> <variable_part> <url>` (공백 2개로 3분할).
+    `_dk_` 접두어는 더블키(사이트 파티셔닝) 캐시: `_dk_<top_frame_site> <variable_part>
+    <url>` 가 기본형이지만, FedCM 등 일부 cross-site 요청은 그 사이에 필드가 하나
+    더 끼어든다 (실 픽스처에서 `..._dk_https://a https://b 2 https://c` 형태 관측 —
+    ccl_chromium_reader 도 3분할만 가정해 같은 픽스처에서 동일하게 틀린다). URL 은
+    항상 공백을 포함하지 않으므로, 필드 개수에 상관없이 마지막 공백 분리 토큰을
+    URL 로 본다.
     `Range_` 접두어 + `:<hash>:<index>` 접미어는 HTTP Range 요청으로 생긴 sparse
     캐시의 자식 엔트리 — 부모 리소스와 같은 URL 로 정리한다.
     ccl_chromium_reader 의 CacheKey 클래스 방식을 참고했다.
@@ -96,9 +100,9 @@ class CacheKey:
             rest = rest.split("/", 1)[-1]
 
         if rest.startswith("_dk_"):
-            parts = rest[4:].split(" ", 2)
-            if len(parts) == 3:
-                rest = parts[2]
+            parts = rest[4:].split(" ")
+            if len(parts) >= 3:
+                rest = parts[-1]
         return _SPARSE_SUFFIX.sub("", rest)
 
 
