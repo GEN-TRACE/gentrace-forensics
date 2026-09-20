@@ -3,7 +3,7 @@
 - CacheAddr → data_N 오프셋에서 EntryStore 읽기 (키, 스트림 주소)
 - Stream 0 : HTTP 응답 헤더. Chromium 이 `base::Pickle` 포맷으로 직렬화한다
   (net/http/http_response_info.cc `HttpResponseInfo::Persist`/`InitFromPickle`).
-  status line, 헤더 딕셔너리만 뽑는다 — cert/SSL/vary 등 뒤쪽 옵션 필드는 분류에
+  status line, 헤더 딕셔너리와 요청·응답 시각을 뽑는다 — cert/SSL/vary 등 뒤쪽 필드는
   쓰지 않아 값은 버리고 커서만 올바르게 넘긴다.
 - Stream 1 : 응답 본문. 작은 본문은 블록 내부, 큰 본문은 f_XXXXXX.
 - 캐시 키 접두어(`1/0/https://...`) 처리는 CacheKey 에서.
@@ -33,6 +33,7 @@ __all__ = [
     "CacheEntry",
     "CacheKey",
     "HttpResponseInfo",
+    "data_location",
     "iter_entries",
     "read_block_data",
     "read_entry",
@@ -61,6 +62,8 @@ class HttpResponseInfo:
 
     status: int | None
     headers: dict[str, str] = field(default_factory=dict)
+    request_time_us: int | None = None
+    response_time_us: int | None = None
 
     def get(self, name: str) -> str | None:
         return self.headers.get(name.lower())
@@ -163,8 +166,8 @@ def _parse_response_info(buf: bytes) -> HttpResponseInfo:
     if flags & _RESPONSE_INFO_HAS_EXTRA_FLAGS:
         extra_flags = reader.read_uint32()
 
-    reader.read_int64()  # request_time, 분류엔 불필요
-    reader.read_int64()  # response_time, 분류엔 불필요
+    request_time_us = reader.read_int64() or None
+    response_time_us = reader.read_int64() or None
     if extra_flags & _RESPONSE_EXTRA_INFO_HAS_ORIGINAL_RESPONSE_TIME:
         reader.read_int64()  # original_response_time
 
@@ -186,7 +189,12 @@ def _parse_response_info(buf: bytes) -> HttpResponseInfo:
         if sep:
             headers[name.strip().lower()] = value.strip()
 
-    return HttpResponseInfo(status=status, headers=headers)
+    return HttpResponseInfo(
+        status=status,
+        headers=headers,
+        request_time_us=request_time_us,
+        response_time_us=response_time_us,
+    )
 
 
 @dataclass
@@ -228,22 +236,26 @@ def _find_external_file(cache_dir: Path, file_number: int) -> Path:
     raise FileNotFoundError(f"external cache file not found: {stem}*")
 
 
-def read_block_data(cache_dir: Path, addr: CacheAddr) -> bytes:
-    """BLOCK 파일(data_N) 또는 EXTERNAL 파일(f_*)에서 addr 가 가리키는 raw 바이트.
-
-    할당된 블록 전체(패딩 포함)를 반환한다. 실제 유효 길이(EntryStore.data_size)로
-    자르는 건 호출자 책임 (CacheEntry._read_stream 참고).
-    """
+def data_location(cache_dir: Path, addr: CacheAddr) -> tuple[Path, int]:
+    """읽기에 사용할 실제 파일 경로와 바이트 오프셋. 외부 파일 확장자도 보존한다."""
     cache_dir = Path(cache_dir)
     if not addr.is_initialized:
         raise ValueError(f"uninitialized CacheAddr: 0x{addr.raw:08x}")
-
     if addr.file_type == FileType.EXTERNAL:
-        return _find_external_file(cache_dir, addr.external_file_number).read_bytes()
+        return _find_external_file(cache_dir, addr.external_file_number), 0
+    return cache_dir / f"data_{addr.block_file_number}", addr.file_offset(BLOCK_HEADER_SIZE)
 
-    data_path = cache_dir / f"data_{addr.block_file_number}"
+
+def read_block_data(cache_dir: Path, addr: CacheAddr) -> bytes:
+    """할당된 블록 전체(패딩 포함) 또는 외부 파일을 읽는다.
+
+    실제 유효 길이(EntryStore.data_size)로 자르는 건 호출자 책임이다.
+    """
+    data_path, offset = data_location(cache_dir, addr)
+    if addr.file_type == FileType.EXTERNAL:
+        return data_path.read_bytes()
     with data_path.open("rb") as f:
-        f.seek(addr.file_offset(BLOCK_HEADER_SIZE))
+        f.seek(offset)
         return f.read(addr.block_size * addr.num_blocks)
 
 

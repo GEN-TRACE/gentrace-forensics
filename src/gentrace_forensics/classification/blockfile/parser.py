@@ -61,7 +61,12 @@ def _to_parsed(raw: _self_backend.RawCacheEntry) -> ParsedCacheEntry:
     return ParsedCacheEntry(
         cache_key=raw.cache_key,
         url=raw.url,
-        response=HttpResponseInfo(status=raw.http_status, headers=dict(raw.headers)),
+        response=HttpResponseInfo(
+            status=raw.http_status,
+            headers=dict(raw.headers),
+            request_time_us=raw.request_time_us,
+            response_time_us=raw.response_time_us,
+        ),
         body=body,
         body_sha256=hashlib.sha256(body).hexdigest(),
         stored_body_size=raw.stored_body_size,
