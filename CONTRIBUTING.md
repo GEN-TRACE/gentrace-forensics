@@ -185,7 +185,9 @@ JSON 메타데이터만 있다. ChatGPT 업로드·생성 파일과 Claude 파�
 정규화 결과와 함께 분류 `classified.jsonl`과 `bodies/`를 보관한다. 공통 스키마에 없는
 분류 근거·경고·본문 경로는 `source_id`의 이미지·파티션·프로필·`entry_id`로 원래 분류
 레코드에 연결한다. 대표 시각은 캐시 응답 → 요청 → 생성 시각 순서이며, 실제 사용자
-행위 시각과 같다고 단정하지 않는다. `normalize`와 전체 `run` CLI 연결은 후속 작업이다.
+행위 시각과 같다고 단정하지 않는다. `normalize`는 분류 JSONL에서 두 저장 형식을 만들고,
+`run`은 획득 → 분류 → 정규화를 순서대로 실행한다. 각 단계의 출력과 전체 실행 상태는
+별도 JSON 보고서로 기록한다. 기존 출력 폴더는 덮어쓰지 않는다.
 
 ---
 
@@ -278,7 +280,9 @@ gentrace-forensics/
 │   └── workflows/                  # ci.yml, codeql.yml
 ├── src/gentrace_forensics/
 │   ├── __init__.py
-│   ├── cli.py                      # classify 연결 완료; acquire / normalize / run 예정
+│   ├── cli.py                      # acquire / classify / normalize / run
+│   ├── pipeline.py                 # 전체 실행과 완료/실패 보고서
+│   ├── reporting.py                # 실행 보고서 JSON 교체
 │   ├── schemas/
 │   │   ├── __init__.py
 │   │   ├── acquisition.py          # AcquiredFile, AcquiredCache
@@ -289,7 +293,8 @@ gentrace-forensics/
 │   │   ├── README.md
 │   │   ├── image.py                # E01 열기
 │   │   ├── filesystem.py           # 파티션·NTFS·프로필 탐색
-│   │   └── extract.py              # Cache_Data 추출 + 해시
+│   │   ├── extract.py              # Cache_Data 추출 + 해시
+│   │   └── pipeline.py             # 이미지·파일시스템·프로필별 추출 연결
 │   ├── classification/             # 지민
 │   │   ├── __init__.py
 │   │   ├── README.md
@@ -318,7 +323,8 @@ gentrace-forensics/
 │       ├── url.py                  # tldextract 기반 도메인·경로 정규화
 │       ├── mapping.py              # 서비스명·이벤트 타입 매핑 테이블
 │       ├── transform.py            # ClassifiedEntry → NormalizedArtifact
-│       └── store.py                # SQLite / JSONL 저장
+│       ├── store.py                # SQLite / JSONL 저장
+│       └── pipeline.py             # 분류 JSONL 입력·저장·건수 검증
 ├── samples/                        # 익명화된 소형 테스트 데이터만
 ├── tests/
 │   ├── acquisition/
@@ -358,6 +364,12 @@ dev         = ["pytest", "ruff", "mypy", "bandit", "pip-audit"]
 - 분류 파서 결과는 ChromeCacheView, Hindsight 결과와 대조한다. 엔트리 수, URL, Content-Type, 크기가 일치해야 한다.
 - 모든 출력 레코드는 원본 E01 → 파일 → 오프셋까지 역추적 가능해야 한다.
 - 추측으로 채우는 필드는 없다. 모르면 `None`.
+
+실제 E01 검증은 `GENTRACE_E01_FIXTURE`를 지정해 `tests/test_e01_integration.py`를
+실행한다. 네이티브 바인딩으로 전체 `run`을 수행하고 추출 파일·본문 해시, 출처 연결,
+JSONL·SQLite 레코드 일치를 확인한다. 이미지 경로가 없으면 이 테스트는 skip된다.
+따라서 합성 데이터 테스트나 CI 통과와 실제 E01 전체 실행 검증을 구분해 보고한다.
+실행 예시는 [README.md](README.md)의 검증 기준을 따른다.
 
 ### CI 자동 검사
 

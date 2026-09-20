@@ -37,7 +37,24 @@
 
 `tests/normalization/`은 시각·URL·매핑·출처·SQLite/JSONL 왕복과 저장 실패를 검증한다.
 `tests/test_pipeline_contracts.py`는 합성 파일시스템에서 프로필별 획득 매니페스트를
-만든 뒤 분류·정규화 결과의 연결을 검사한다. `normalize` CLI 연결은 후속 작업이다.
+만든 뒤 분류·정규화 결과의 연결을 검사한다.
+
+## CLI 연결
+
+[pipeline.py](pipeline.py)의 `normalize_entries()`가 분류 JSONL을 읽고 저장을 연결한다.
+
+```bash
+gentrace normalize --entries outputs/classified/classified.jsonl --out outputs/normalized/
+```
+
+출력 폴더는 새 경로여야 한다. 입력을 한 번 읽어 `normalized.jsonl`을 만든 뒤 같은
+스냅샷으로 `normalized.db`를 작성한다. 레코드 검증 실패는 입력 줄 번호를 보고하며,
+DB의 중복 `source_id`로 두 출력의 건수가 달라져도 실패 처리한다. 실패 시 이번 호출의
+출력만 정리한다. SQLite 연결은 저장이 끝나거나 실패하면 명시적으로 닫는다.
+
+`normalization.json`에는 분류 입력의 절대 경로·SHA-256, 결과 경로·건수를 기록한다.
+원래 `classified.jsonl`과 본문 파일을 복사하거나 삭제하지 않는다. 출력과 함께 보관해
+분류 근거를 유지해야 한다. 빈 입력은 0건의 JSONL·유효한 빈 SQLite DB로 저장한다.
 
 ## 규칙
 

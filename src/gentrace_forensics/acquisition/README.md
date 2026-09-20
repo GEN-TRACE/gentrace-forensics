@@ -25,6 +25,23 @@
 
 대안: `dfVFS`로 1~4단계 통합 처리 가능. 우선은 pyewf + pytsk3로 시작.
 
+## CLI 연결
+
+[pipeline.py](pipeline.py)의 `acquire_image()`가 위 단계를 연결한다.
+
+```bash
+gentrace acquire --image /path/to/disk.E01 --out outputs/acquired/
+```
+
+NTFS의 지원 경로에서 모든 Chrome 프로필을 찾고, 논리 디스크 해시는 한 번만 계산한다.
+프로필별 매니페스트 경로를 표준 출력과 `acquisition.json`의 `manifests`에 기록한다.
+`acquisition.json`은 실행 요약이며 개별 `AcquiredCache` 매니페스트와 구분한다.
+해시 계산은 10% 단위로 진행률을 출력한다. 파일시스템 객체를 해제한 뒤 이미지 핸들을 닫는다.
+
+출력 폴더는 새 경로여야 한다. 프로필이 없으면 실패하고, 추출 중 실패하면 이번 실행이
+만든 획득 폴더를 정리한다. 전체 `run`에서 이후 분류·정규화가 실패한 경우에는 이미
+완료한 획득 결과를 보존한다. `image_sha256`은 E01 컨테이너가 아닌 복원된 논리 미디어 해시다.
+
 ## 규칙
 
 - 이 폴더만 수정. 스키마 변경은 셋이 합의 후.
