@@ -1,9 +1,9 @@
-"""ccl_chromium_reader 를 감싼 blockfile 캐시 백엔드 (Phase 1).
+"""ccl_chromium_reader 를 감싼 blockfile 캐시 백엔드 (Phase 1 — 이제는 참조·검증용).
 
-이 모듈이 유일하게 ccl 에 의존한다. Phase 2 에서 자체 파서(structs/addr/index/entry)가
-완성되면 이 파일만 교체하고 `parser.py` 는 그대로 둔다.
-
-`iter_raw_entries()` 가 반환하는 `RawCacheEntry` 가 그 경계다.
+이 모듈이 유일하게 ccl 에 의존한다. `parser.py` 의 실제 엔진은 자체 파서
+(`_self_backend.py`, structs/addr/index/entry) 로 교체됐고, 이 모듈은
+`tests/classification/test_blockfile_entry.py` 의 교차검증(참조 구현과 전수
+대조)용으로 남겨둔다. `RawCacheEntry` 가 두 백엔드가 공유하는 계약이다.
 """
 
 from __future__ import annotations

@@ -200,7 +200,7 @@ class EntryStore:
     @property
     def inline_key(self) -> str:
         """long_key 미사용(key_len <= len(key 버퍼)) 시의 캐시 키 문자열."""
-        return self.key.split(b"\x00", 1)[0].decode("utf-8", errors="replace")
+        return self.key[: self.key_len].decode("utf-8", errors="replace")
 
     @classmethod
     def parse(cls, buf: bytes) -> EntryStore:

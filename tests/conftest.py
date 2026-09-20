@@ -7,7 +7,6 @@
 
 from __future__ import annotations
 
-import importlib.util
 import os
 from pathlib import Path
 
@@ -46,14 +45,13 @@ def samples_dir() -> Path:
 def cache_fixture_dir() -> Path:
     """로컬 Chrome blockfile 캐시 디렉터리. 없으면 테스트 skip.
 
-    Phase 1 파서는 ccl_chromium_reader(`reference` extra)를 엔진으로 쓰므로
-    ccl 미설치 시에도 skip 한다.
+    파서 엔진(`_self_backend`)은 자체 구현이라 ccl_chromium_reader 가 없어도
+    된다. ccl 이 필요한 건 참조 구현과 대조하는 교차검증 테스트뿐이며, 그 테스트가
+    직접 ccl 유무를 확인한다 (tests/classification/test_blockfile_entry.py).
     """
     found = _find_blockfile_cache()
     if found is None:
         pytest.skip(
             "로컬 Chrome 캐시 픽스처 없음 (Cache_Data/ 배치 또는 GENTRACE_CACHE_FIXTURE 설정)"
         )
-    if importlib.util.find_spec("ccl_chromium_reader") is None:
-        pytest.skip('ccl_chromium_reader 미설치 (pip install -e ".[reference]")')
     return found
