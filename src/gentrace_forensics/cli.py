@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 
 def _add_acquire(sub: argparse._SubParsersAction) -> None:
@@ -48,7 +49,25 @@ def cmd_acquire(args: argparse.Namespace) -> int:
 
 
 def cmd_classify(args: argparse.Namespace) -> int:
-    raise NotImplementedError("classification 단계 미구현 (지민)")
+    from gentrace_forensics.classification.classify import classify_cache
+    from gentrace_forensics.schemas.acquisition import AcquiredCache
+
+    manifest_path = Path(args.cache)
+    cache = AcquiredCache.model_validate_json(manifest_path.read_text(encoding="utf-8"))
+    cache_dir = manifest_path.parent / "Cache" / "Cache_Data"
+
+    out_dir = Path(args.out)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    entries = classify_cache(cache, cache_dir, body_dir=out_dir / "bodies")
+
+    out_path = out_dir / "classified.jsonl"
+    with out_path.open("w", encoding="utf-8", newline="\n") as f:
+        for entry in entries:
+            f.write(entry.model_dump_json())
+            f.write("\n")
+
+    print(f"classified {len(entries)} entries -> {out_path}", file=sys.stderr)
+    return 0
 
 
 def cmd_normalize(args: argparse.Namespace) -> int:

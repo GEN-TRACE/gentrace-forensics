@@ -11,7 +11,6 @@ fixture 를 쓴다.
 
 from __future__ import annotations
 
-import importlib.util
 import os
 from pathlib import Path
 
@@ -37,16 +36,15 @@ def _find_blockfile_cache(*candidates: Path | str | None) -> Path | None:
 
 
 def _require_cache_fixture(*candidates: Path | str | None, description: str) -> Path:
-    """후보 경로 중 첫 블록파일 캐시를 반환. 없거나 ccl 미설치면 테스트 skip.
+    """후보 경로 중 첫 블록파일 캐시를 반환. 없으면 테스트 skip.
 
-    Phase 1 파서는 ccl_chromium_reader(`reference` extra)를 엔진으로 쓰므로
-    ccl 미설치 시에도 skip 한다.
+    파서 엔진(`_self_backend`)은 자체 구현이라 ccl_chromium_reader 가 없어도
+    된다. ccl 이 필요한 건 참조 구현과 대조하는 교차검증 테스트뿐이며, 그 테스트가
+    직접 ccl 유무를 확인한다 (tests/classification/test_blockfile_entry.py).
     """
     found = _find_blockfile_cache(*candidates)
     if found is None:
         pytest.skip(f"로컬 Chrome 캐시 픽스처 없음: {description}")
-    if importlib.util.find_spec("ccl_chromium_reader") is None:
-        pytest.skip('ccl_chromium_reader 미설치 (pip install -e ".[reference]")')
     return found
 
 

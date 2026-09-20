@@ -1,10 +1,13 @@
 """chrome_blockfile_parser 통합 — 분류 단계의 입력 경계.
 
 `parse_cache_dir(path) -> list[ParsedCacheEntry]` 가 이 프로젝트에서 캐시를 읽는
-유일한 공개 API 다. 지금은 내부적으로 `_ccl_backend`(ccl_chromium_reader)를 쓰고,
-Phase 2 에서 자체 파서로 교체해도 이 함수의 시그니처·반환 형식은 그대로 둔다.
+유일한 공개 API 다. 엔진은 `_self_backend`(자체 구현 `structs`/`addr`/`index`/
+`entry`, Phase 2) — `_ccl_backend`(ccl_chromium_reader)는 삭제하지 않고 교차검증
+(tests/classification/test_blockfile_entry.py)용으로 남겨둔다.
 
-검증: ChromeCacheView / Hindsight 와 대조 (엔트리 수, URL, Content-Type, 크기).
+검증: 두 백엔드가 같은 픽스처에서 URL·상태코드·헤더·본문 SHA-256 전수 일치함을
+확인했다 (Phase 2 전환 시점의 회귀 테스트로도 계속 쓴다). 외부 툴(ChromeCacheView
+/ Hindsight) 대조는 아직 진행 전.
 """
 
 from __future__ import annotations
@@ -15,22 +18,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from gentrace_forensics.classification import http
-from gentrace_forensics.classification.blockfile import _ccl_backend
+from gentrace_forensics.classification.blockfile import _self_backend
+from gentrace_forensics.classification.blockfile.entry import HttpResponseInfo
 
-
-@dataclass
-class HttpResponseInfo:
-    """캐시 엔트리 Stream 0 (HTTP 응답 메타데이터)."""
-
-    status: int | None
-    headers: dict[str, str] = field(default_factory=dict)
-
-    def get(self, name: str) -> str | None:
-        return self.headers.get(name.lower())
-
-    @property
-    def content_type(self) -> str | None:
-        return self.get("content-type")
+__all__ = ["BlockfileCache", "HttpResponseInfo", "ParsedCacheEntry", "parse_cache_dir"]
 
 
 @dataclass
@@ -65,7 +56,7 @@ class ParsedCacheEntry:
         )
 
 
-def _to_parsed(raw: _ccl_backend.RawCacheEntry) -> ParsedCacheEntry:
+def _to_parsed(raw: _self_backend.RawCacheEntry) -> ParsedCacheEntry:
     body, decode_warnings = http.decompress_with_warnings(raw.stored_body, raw.content_encoding)
     return ParsedCacheEntry(
         cache_key=raw.cache_key,
@@ -95,7 +86,7 @@ class BlockfileCache:
         self.cache_dir = Path(cache_dir)
 
     def iter_entries(self) -> Iterator[ParsedCacheEntry]:
-        for raw in _ccl_backend.iter_raw_entries(self.cache_dir):
+        for raw in _self_backend.iter_raw_entries(self.cache_dir):
             yield _to_parsed(raw)
 
     def entries(self) -> list[ParsedCacheEntry]:
