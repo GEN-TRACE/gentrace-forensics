@@ -91,7 +91,52 @@ def test_body_written_to_disk(source_cache: AcquiredCache, tmp_path: Path) -> No
     (c,) = classify_entries([entry], source_cache=source_cache, body_dir=tmp_path)
     assert c.body_path is not None
     assert c.body_path.read_bytes() == b"\x00\x01\x02payload"
-    assert c.body_path.parent == tmp_path
+    assert c.body_path.parent.parent == tmp_path
+    assert c.body_path.name == f"{hashlib.sha256(entry.body).hexdigest()}.bin"
+
+
+@pytest.mark.parametrize("name", ["a" * 255, "가" * 240 + ".png"])
+def test_long_logical_filename_does_not_limit_body_storage(
+    source_cache: AcquiredCache, tmp_path: Path, name: str
+) -> None:
+    entry = make_entry(f"https://example.test/{name}", body=b"long-name content")
+    (classified,) = classify_entries([entry], source_cache=source_cache, body_dir=tmp_path)
+
+    assert classified.filename == entry.filename
+    assert classified.body_path is not None
+    assert len(classified.body_path.name.encode("utf-8")) <= 255
+    assert classified.body_path.read_bytes() == entry.body
+
+
+def test_profiles_and_updated_responses_keep_separate_bodies(
+    source_cache: AcquiredCache, tmp_path: Path
+) -> None:
+    first = make_entry("https://example.test/report", body=b"first response")
+    second = make_entry(first.url, body=b"updated response")
+    other_profile = source_cache.model_copy(update={"chrome_profile": "Profile 1"})
+
+    (a,) = classify_entries([first], source_cache=source_cache, body_dir=tmp_path)
+    (b,) = classify_entries([second], source_cache=source_cache, body_dir=tmp_path)
+    (c,) = classify_entries([first], source_cache=other_profile, body_dir=tmp_path)
+    (again,) = classify_entries([first], source_cache=source_cache, body_dir=tmp_path)
+
+    assert a.body_path and b.body_path and c.body_path
+    assert len({a.body_path, b.body_path, c.body_path}) == 3
+    assert a.body_path.read_bytes() == c.body_path.read_bytes() == first.body
+    assert b.body_path.read_bytes() == second.body
+    assert again.body_path == a.body_path
+
+
+def test_body_path_is_independent_of_working_directory(
+    source_cache: AcquiredCache, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    entry = make_entry("https://example.test/report", body=b"report")
+    (classified,) = classify_entries([entry], source_cache=source_cache, body_dir=Path("bodies"))
+    monkeypatch.chdir(tmp_path.parent)
+
+    assert classified.body_path and classified.body_path.is_absolute()
+    assert classified.body_path.read_bytes() == entry.body
 
 
 def test_empty_body_not_written(source_cache: AcquiredCache, tmp_path: Path) -> None:

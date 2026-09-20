@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 
@@ -43,13 +44,34 @@ def _local_acquired_cache(cache_dir: Path) -> AcquiredCache:
     )
 
 
-def _write_body(entry: ParsedCacheEntry, body_dir: Path, entry_id: str) -> Path | None:
+def _cache_id(cache: AcquiredCache) -> str:
+    """서로 다른 이미지·파티션·프로필의 본문 저장 공간을 분리하는 식별자."""
+    identity = (
+        cache.image_path,
+        cache.image_sha256,
+        cache.partition_offset,
+        cache.windows_user,
+        cache.chrome_profile,
+        cache.source_path,
+    )
+    return hashlib.sha256(json.dumps(identity, ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def _write_body(entry: ParsedCacheEntry, body_dir: Path) -> Path | None:
     if not entry.body:
         return None
     body_dir.mkdir(parents=True, exist_ok=True)
-    dest = body_dir / f"{entry_id}_{entry.filename}"
-    dest.write_bytes(entry.body)
-    return dest
+    # 논리 파일명은 ClassifiedEntry.filename에 보존한다. 디스크 이름은 길이와
+    # 문자 인코딩에 영향을 받지 않으며, 같은 키의 새 응답도 기존 본문을 덮어쓰지 않는다.
+    digest = hashlib.sha256(entry.body).hexdigest()
+    dest = body_dir / f"{digest}.bin"
+    try:
+        with dest.open("xb") as output:
+            output.write(entry.body)
+    except FileExistsError:
+        if dest.read_bytes() != entry.body:
+            raise FileExistsError(f"existing body does not match its content hash: {dest}")
+    return dest.resolve()
 
 
 def _route(
@@ -72,6 +94,7 @@ def classify_entries(
 ) -> list[ClassifiedEntry]:
     """이미 파싱된 엔트리 목록을 분류한다."""
     classifiers: list[ServiceClassifier] = [cls() for cls in ALL_CLASSIFIERS]
+    profile_body_dir = Path(body_dir) / _cache_id(source_cache) if body_dir is not None else None
     out: list[ClassifiedEntry] = []
     for entry in entries:
         entry_id = _entry_id(entry)
@@ -83,7 +106,7 @@ def classify_entries(
         if entry.warnings:
             evidence.setdefault("parse_warnings", list(entry.warnings))
 
-        body_path = _write_body(entry, body_dir, entry_id) if body_dir else None
+        body_path = _write_body(entry, profile_body_dir) if profile_body_dir is not None else None
 
         out.append(
             ClassifiedEntry(

@@ -33,7 +33,7 @@ def test_build_parser_routes_classify_args() -> None:
     parser = cli.build_parser()
     args = parser.parse_args(["classify", "--cache", "a.json", "--out", "outdir"])
     assert args.func is cli.cmd_classify
-    assert args.cache == "a.json"
+    assert args.cache == ["a.json"]
     assert args.out == "outdir"
 
 
@@ -63,16 +63,18 @@ def test_cmd_classify_writes_jsonl(tmp_path: Path, monkeypatch: pytest.MonkeyPat
         return classified
 
     monkeypatch.setattr(
-        "gentrace_forensics.classification.classify.classify_cache", fake_classify_cache
+        "gentrace_forensics.classification.output.classify_cache", fake_classify_cache
     )
 
     out_dir = tmp_path / "out"
-    args = argparse.Namespace(cache=str(manifest_path), out=str(out_dir))
+    args = argparse.Namespace(cache=[str(manifest_path)], out=str(out_dir))
     assert cli.cmd_classify(args) == 0
 
     assert seen["cache"] == cache
     assert seen["cache_dir"] == manifest_path.parent / "Cache" / "Cache_Data"
-    assert seen["body_dir"] == out_dir / "bodies"
+    assert isinstance(seen["body_dir"], Path)
+    assert seen["body_dir"].name == "bodies"
+    assert not seen["body_dir"].exists()  # 성공 후 임시 폴더는 정리된다.
 
     lines = (out_dir / "classified.jsonl").read_text(encoding="utf-8").splitlines()
     assert len(lines) == 1
@@ -88,11 +90,11 @@ def test_cmd_classify_no_entries_writes_empty_file(
     _write_manifest(manifest_path)
 
     monkeypatch.setattr(
-        "gentrace_forensics.classification.classify.classify_cache",
+        "gentrace_forensics.classification.output.classify_cache",
         lambda *args, **kwargs: [],
     )
 
     out_dir = tmp_path / "out"
-    args = argparse.Namespace(cache=str(manifest_path), out=str(out_dir))
+    args = argparse.Namespace(cache=[str(manifest_path)], out=str(out_dir))
     assert cli.cmd_classify(args) == 0
     assert (out_dir / "classified.jsonl").read_text(encoding="utf-8") == ""
