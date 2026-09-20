@@ -86,15 +86,23 @@ Chromium `net/disk_cache/blockfile/`의 `disk_format.h`(구조체 정의), `addr
 4. 각 주소의 `data_N` 오프셋에서 엔트리 읽기 (키, 헤더 위치, 본문 위치)
 5. Stream 0(HTTP 응답 헤더)에서 `Content-Type`, `Content-Encoding`, 실제 URL 추출
    - 캐시 키가 `1/0/https://…` 형태로 접두어가 붙는 경우가 있으므로 키 전체를 URL로 간주하지 않는다. `ccl_chromium_reader`의 `CacheKey` 클래스 방식 참고.
-6. Stream 1(응답 본문) 추출. 작은 본문은 블록 내부, 큰 본문은 `f_XXXXXX`. gzip/zlib/Brotli 해제.
-7. `chrome_blockfile_parser.py`로 통합
+   - 요청·응답 시각은 raw WebKit microseconds로 보존해 정규화에 전달한다.
+6. Stream 1(응답 본문) 추출. 작은 본문은 블록 내부, 큰 본문은 `f_XXXXXX`. gzip/deflate/Brotli/Zstandard 해제.
+   - 공유 사전이 필요한 `dcb`/`dcz`는 원문과 경고를 보존한다.
+7. `classification/blockfile/parser.py`로 통합
 8. 같은 캐시 폴더를 ChromeCacheView / Hindsight와 대조. 불일치는 헥스 재확인.
+
+1~7은 구현됐으며 로컬 픽스처의 참조 파서 대조 테스트가 있다. 8은 아직 완료되지 않았다.
+본문의 실제 파일명·오프셋을 기록하고, 본문이 없거나 읽지 못했으면 EntryStore 위치를 기록한다.
 
 논리적 파일명 결정 순서 (ChromeCacheView와 동일)
 1. `Content-Disposition`의 `filename`
 2. URL 마지막 경로 세그먼트
 3. URL 경로 + MIME 기반 확장자
 4. 없으면 엔트리 해시 기반 이름
+
+논리 파일명은 `ClassifiedEntry.filename`에 보존하고, 디스크에는
+`bodies/<이미지·프로필 식별자>/<본문 SHA-256>.bin`으로 저장한다.
 
 #### 3.2.2 서비스별 분류 기준
 
@@ -115,16 +123,18 @@ Chromium `net/disk_cache/blockfile/`의 `disk_format.h`(구조체 정의), `addr
 | URL | `claude.ai/api/[conversation_id]/files/[file_id]` | 인코딩된 URL 경로 디코딩 필요 |
 | 파일명 | `preview.webp` | 디코딩 시 `/mnt/user-data/outputs/<파일명>` 형태 |
 
-**Gemini (Nano Banana 2)** – 업로드와 생성본이 같은 도메인·같은 Content-Type·같은 파일명
+**Gemini (Nano Banana 2)** – 현재 로컬 픽스처에서 관측한 생성본 변형
 
 | 항목 | 값 |
 | --- | --- |
-| Content-Type | `image/jpeg` |
 | 도메인 | `lh3.googleusercontent.com` |
-| 구분 1 | URL 경로 세그먼트 `rd-gg`(업로드) vs `rd-gg-dl`(생성본) |
-| 구분 2 | 파일 크기. 생성본이 워터마크 때문에 더 큼 (예: 79,589 < 149,295 bytes) |
+| 생성본 근거 | 파일명 또는 Content-Disposition의 `watermarked_img_<id>` |
+| 변형 | `rd-gg`: 전체 해상도 PNG / `rd-gg-dl`: 다운로드 JPG |
+| 연결 | 같은 ID의 변형을 페어링, `paired`와 `group_variants`에 기록 |
 
-→ 같은 파일명끼리 페어링 후 세그먼트 + 크기로 판별. 페어링 실패는 `Unmatched_NeedsManualReview`로 분리.
+현재 픽스처에는 사용자 업로드가 확인되지 않았다. 세그먼트·크기만으로 업로드를
+판별하던 초안 규칙은 적용하지 않는다. 생성본 ID가 없으면 `unmatched`로 분리하고,
+ID가 있으나 짝이 없으면 `generated_file`과 `paired=false`로 기록한다.
 
 **Google Veo 3 (deevid.ai)**
 
@@ -132,19 +142,27 @@ Chromium `net/disk_cache/blockfile/`의 `disk_format.h`(구조체 정의), `addr
 | --- | --- | --- |
 | Content-Type | `application/json` | 같은 JSON 내부 필드 |
 | URL | `api.deevid.ai/my-assets` | 동일 캐시 항목 |
-| JSON 필드 | `inputUserImageId`, `originalImageNameUrls` | `videoUrl`, `noWatermarkVideoUrl` |
+| JSON 필드 | `originalImageNameUrls`, `inputUserImageName` | `videoUrl`, `noWaterMarkVideoUrl` |
 | CDN | `cdn2.deevid.ai/user-image/...` | `cdn2.deevid.ai/user-video/...mp4` |
+
+`my-assets` JSON 자체는 `conversation`이며, 자산 키로 CDN 엔트리와 연결한다.
+`v2_rs-image-cover-*` 결과 커버는 생성본으로 분류한다.
 
 **ElevenLabs**
 
 | | File Upload | Generated File |
 | --- | --- | --- |
-| Content-Type | `application/json` | `audio/mpeg` |
-| URL | `api.us.elevenlabs.io/v2/voices` | `v1/voices/[voice_id]/samples/[sample_id]` 또는 `v1/history/[history_item_id]/audio` |
-| JSON 필드 | `voices[].samples[]` → `file_name`, `size_bytes`, `hash`, `preview_url` | URL 패턴으로 판별 |
+| Content-Type | JSON 메타데이터 또는 오디오 | 오디오 |
+| URL | `v2/voices`, `v1/voices/[voice_id]`, `v1/voices/[voice_id]/samples/[sample_id][/audio]` | `v1/history/[history_item_id]/audio` |
+| JSON 필드 | `voices[].samples[]` 또는 `samples[]` → `file_name`, `size_bytes`, `hash` 등 | 이력 JSON은 `conversation`, `generations[]`에 보존 |
 | 파일명 예 | `forensicuser.m4a` → 서버 저장명 `forensicuser.mp3` | – |
 
-분류 로직: ChatGPT·Claude·Veo3·ElevenLabs는 URL/Content-Type 패턴 + JSON 필드 확인. Gemini만 페어링 방식.
+`samples` 오디오는 클론 원본이므로 업로드로 분류한다. 현재 픽스처에는 오디오 본문 없이
+JSON 메타데이터만 있다. ChatGPT 업로드·생성 파일과 Claude 파일 규칙 역시 실제 트래픽
+검증은 남아 있다. 자세한 관측 범위는 [docs/service_patterns.md](docs/service_patterns.md).
+
+분류는 캐시 엔트리 단위다. 파일 정보가 든 JSON을 업로드/생성으로 분류하더라도 실제 파일
+본문을 확보했다는 뜻은 아니다. 개별 파일 메타데이터와 분류 근거는 `evidence`에 보존한다.
 
 ### 3.3 정규화 – 신아
 
@@ -163,6 +181,11 @@ Chromium `net/disk_cache/blockfile/`의 `disk_format.h`(구조체 정의), `addr
 - **Source ID**: 원본 E01·파일·엔트리로 되돌아갈 수 있는 식별자 (SHA-256, 원본 경로, 오프셋)
 
 라이브러리: `pydantic`, `datetime`/`dateutil`, `urllib`/`tldextract`, `hashlib`, `sqlite3`
+
+정규화 결과와 함께 분류 `classified.jsonl`과 `bodies/`를 보관한다. 공통 스키마에 없는
+분류 근거·경고·본문 경로는 `source_id`의 이미지·파티션·프로필·`entry_id`로 원래 분류
+레코드에 연결한다. 대표 시각은 캐시 응답 → 요청 → 생성 시각 순서이며, 실제 사용자
+행위 시각과 같다고 단정하지 않는다. `normalize`와 전체 `run` CLI 연결은 후속 작업이다.
 
 ---
 
@@ -255,7 +278,7 @@ gentrace-forensics/
 │   └── workflows/                  # ci.yml, codeql.yml
 ├── src/gentrace_forensics/
 │   ├── __init__.py
-│   ├── cli.py                      # gentrace acquire / classify / normalize / run
+│   ├── cli.py                      # classify 연결 완료; acquire / normalize / run 예정
 │   ├── schemas/
 │   │   ├── __init__.py
 │   │   ├── acquisition.py          # AcquiredFile, AcquiredCache
@@ -286,7 +309,8 @@ gentrace-forensics/
 │   │   │   ├── gemini.py
 │   │   │   ├── veo3.py
 │   │   │   └── elevenlabs.py
-│   │   └── classify.py             # 서비스 라우팅 + artifact_kind 결정
+│   │   ├── classify.py             # 서비스 라우팅 + artifact_kind 결정
+│   │   └── output.py               # 프로필별 본문 분리 + 여러 매니페스트 JSONL 출력
 │   └── normalization/              # 신아
 │       ├── __init__.py
 │       ├── README.md

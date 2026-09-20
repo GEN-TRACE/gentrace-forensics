@@ -3,8 +3,8 @@
 - CacheAddr → data_N 오프셋에서 EntryStore 읽기 (키, 스트림 주소)
 - Stream 0 : HTTP 응답 헤더. Chromium 이 `base::Pickle` 포맷으로 직렬화한다
   (net/http/http_response_info.cc `HttpResponseInfo::Persist`/`InitFromPickle`).
-  status line, 헤더 딕셔너리와 요청·응답 시각을 뽑는다 — cert/SSL/vary 등 뒤쪽 필드는
-  쓰지 않아 값은 버리고 커서만 올바르게 넘긴다.
+  status line, 헤더 딕셔너리와 요청·응답 시각을 뽑는다.
+  cert/SSL/vary 등 뒤쪽 옵션 필드는 사용하지 않는다.
 - Stream 1 : 응답 본문. 작은 본문은 블록 내부, 큰 본문은 f_XXXXXX.
 - 캐시 키 접두어(`1/0/https://...`) 처리는 CacheKey 에서.
 

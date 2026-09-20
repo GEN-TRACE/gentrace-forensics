@@ -1,9 +1,9 @@
 """`gentrace` CLI 진입점.
 
-서브커맨드 골격만 둔다. 각 단계 구현은 담당 폴더에서 진행.
+classify는 프로필별 매니페스트를 받아 실행한다. acquire / normalize / run은 연결 예정.
 
     gentrace acquire   --image disk.E01 --out outputs/
-    gentrace classify  --cache outputs/acquired.json --out outputs/
+    gentrace classify  --cache path/to/profile/acquired.json --out outputs/classified/
     gentrace normalize --entries outputs/classified.json --out outputs/
     gentrace run       --image disk.E01 --out outputs/   # 전체 파이프라인
 """
