@@ -170,7 +170,8 @@ class BlockFileHeader:
 # CacheAddr long_key; int32 data_size[4]; CacheAddr data_addr[4];
 # uint32 flags; int32 pad[4]; uint32 self_hash; char key[160]
 _ENTRY_STORE_FORMAT = "<IIIiiiQiI4i4II4iI160s"
-assert struct.calcsize(_ENTRY_STORE_FORMAT) == ENTRY_STORE_SIZE, "bad EntryStore format"
+if struct.calcsize(_ENTRY_STORE_FORMAT) != ENTRY_STORE_SIZE:
+    raise AssertionError("bad EntryStore format")
 
 
 @dataclass(frozen=True)
@@ -252,7 +253,8 @@ class EntryStore:
 # uint64 last_used; uint64 no_longer_used_last_modified; CacheAddr next;
 # CacheAddr prev; CacheAddr contents; int32 dirty; uint32 self_hash
 _RANKINGS_NODE_FORMAT = "<QQIIIiI"
-assert struct.calcsize(_RANKINGS_NODE_FORMAT) == RANKINGS_NODE_SIZE, "bad RankingsNode format"
+if struct.calcsize(_RANKINGS_NODE_FORMAT) != RANKINGS_NODE_SIZE:
+    raise AssertionError("bad RankingsNode format")
 
 
 @dataclass(frozen=True)
