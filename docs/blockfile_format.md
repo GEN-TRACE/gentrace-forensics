@@ -124,3 +124,24 @@ _dk_https://... https://... https://...
 - Hindsight (Ryan Benson)
 
 엔트리 수 / URL / Content-Type / 크기 일치 확인. 불일치 시 헥스 재확인.
+
+## Sparse/Range 복원
+
+`artifacts/sparse.py`는 Stream 2의 64-byte `SparseHeader`와 bitmap을 읽는다.
+부모의 bitmap은 자식 존재 여부, 자식의 128-byte bitmap은 1 KiB 블록의 유효 여부를 나타낸다.
+자식 키는 `Range_<정확한 부모 키>:<signature hex>:<child id hex>`이며 자식당 논리 범위는 1 MiB다.
+`last_block=-1`은 부분 블록을 추적하지 않는 정상 sentinel이다. 양수 부분 블록은
+`last_block_len`만 유효하며, 저장 스트림 안의 나머지 바이트를 무조건 유효 데이터로 읽지 않는다.
+
+파서는 EntryStore flags와 stream 위치·원시 sparse index를 추가로 전달한다. 기존 URL·본문
+인터페이스는 유지하며, 16진 자식 ID를 URL에서 제거하는 처리를 바로잡았다. 일반 URL 끝의
+비슷한 문자열은 제거하지 않는다. 스트림 선언 길이가 확보 바이트보다 크면 경고로 남긴다.
+중복/순환 엔트리 주소는 무한 순회 대신 오류로 처리한다.
+
+정확한 키·세대·bitmap이 맞는 조각만 합친다. `Content-Range`의 전체 크기, 구간 누락,
+중복 바이트의 충돌을 검사하고 완전한 경우에만 조립한다. 나머지는 논리 오프셋을 담은
+독립 조각으로 보존한다. 전체 파일 조립 성공과 FFmpeg 디코드 성공을 모두 확인해야
+영상 표현을 `complete`로 표시한다. 형식·한도·검증 상태는 [출력 계약](artifact_outputs.md) 참조.
+
+명세: Chromium [sparse_control.cc](https://github.com/chromium/chromium/blob/main/net/disk_cache/blockfile/sparse_control.cc),
+[disk_format_base.h](https://github.com/chromium/chromium/blob/main/net/disk_cache/blockfile/disk_format_base.h).

@@ -106,63 +106,15 @@ Chromium `net/disk_cache/blockfile/`의 `disk_format.h`(구조체 정의), `addr
 
 #### 3.2.2 서비스별 분류 기준
 
-**ChatGPT**
+현재 정책은 `artifact-1`이다. [서비스별 근거](docs/service_patterns.md)와
+[아티팩트 출력 계약](docs/artifact_outputs.md)을 따른다. URL·Content-Type 휴리스틱만으로
+사용자 업로드나 생성 행동을 확정하지 않는다. 구조화된 메시지·작업·보이스/이력에서
+개별 파일과 JSON pointer를 추출하고 캐시의 여러 표현과 연결한다.
 
-| | File Upload | Generated File |
-| --- | --- | --- |
-| Content-Type | `image/png` | 대화 캐시 JSON 내부 필드로 판별 |
-| URL | `chatgpt.com/backend-api/estuary/content?id=file_...` | 대화 캐시 JSON(`conversation_id`), `download_url` 필드 |
-| 식별자 | URL의 `file_id` | – |
-| 비고 | – | 비로그인 상태에서도 `file_name`, `file_size_bytes`는 평문 잔존. 본문은 "File stream access denied" |
-
-**Claude**
-
-| | File Upload | Generated File |
-| --- | --- | --- |
-| Content-Type | `image/webp` | `application/octet-stream` |
-| URL | `claude.ai/api/[conversation_id]/files/[file_id]` | 인코딩된 URL 경로 디코딩 필요 |
-| 파일명 | `preview.webp` | 디코딩 시 `/mnt/user-data/outputs/<파일명>` 형태 |
-
-**Gemini (Nano Banana 2)** – 현재 로컬 픽스처에서 관측한 생성본 변형
-
-| 항목 | 값 |
-| --- | --- |
-| 도메인 | `lh3.googleusercontent.com` |
-| 생성본 근거 | 파일명 또는 Content-Disposition의 `watermarked_img_<id>` |
-| 변형 | `rd-gg`: 전체 해상도 PNG / `rd-gg-dl`: 다운로드 JPG |
-| 연결 | 같은 ID의 변형을 페어링, `paired`와 `group_variants`에 기록 |
-
-현재 픽스처에는 사용자 업로드가 확인되지 않았다. 세그먼트·크기만으로 업로드를
-판별하던 초안 규칙은 적용하지 않는다. 생성본 ID가 없으면 `unmatched`로 분리하고,
-ID가 있으나 짝이 없으면 `generated_file`과 `paired=false`로 기록한다.
-
-**Google Veo 3 (deevid.ai)**
-
-| | File Upload | Generated File |
-| --- | --- | --- |
-| Content-Type | `application/json` | 같은 JSON 내부 필드 |
-| URL | `api.deevid.ai/my-assets` | 동일 캐시 항목 |
-| JSON 필드 | `originalImageNameUrls`, `inputUserImageName` | `videoUrl`, `noWaterMarkVideoUrl` |
-| CDN | `cdn2.deevid.ai/user-image/...` | `cdn2.deevid.ai/user-video/...mp4` |
-
-`my-assets` JSON 자체는 `conversation`이며, 자산 키로 CDN 엔트리와 연결한다.
-`v2_rs-image-cover-*` 결과 커버는 생성본으로 분류한다.
-
-**ElevenLabs**
-
-| | File Upload | Generated File |
-| --- | --- | --- |
-| Content-Type | JSON 메타데이터 또는 오디오 | 오디오 |
-| URL | `v2/voices`, `v1/voices/[voice_id]`, `v1/voices/[voice_id]/samples/[sample_id][/audio]` | `v1/history/[history_item_id]/audio` |
-| JSON 필드 | `voices[].samples[]` 또는 `samples[]` → `file_name`, `size_bytes`, `hash` 등 | 이력 JSON은 `conversation`, `generations[]`에 보존 |
-| 파일명 예 | `forensicuser.m4a` → 서버 저장명 `forensicuser.mp3` | – |
-
-`samples` 오디오는 클론 원본이므로 업로드로 분류한다. 현재 픽스처에는 오디오 본문 없이
-JSON 메타데이터만 있다. ChatGPT 업로드·생성 파일과 Claude 파일 규칙 역시 실제 트래픽
-검증은 남아 있다. 자세한 관측 범위는 [docs/service_patterns.md](docs/service_patterns.md).
-
-분류는 캐시 엔트리 단위다. 파일 정보가 든 JSON을 업로드/생성으로 분류하더라도 실제 파일
-본문을 확보했다는 뜻은 아니다. 개별 파일 메타데이터와 분류 근거는 `evidence`에 보존한다.
+기존 `ClassifiedEntry`는 캐시 관측을 유지한다. 별도 `artifacts/models.py`의 버전 1 계약이
+파일 자산·표현·복원 상태·출처와 다대다 관계를 표현한다. 기존 `schemas/` 필드는 변경하지 않는다.
+새 정규화에서 파일 관측은 `cache_write`, 메타데이터 응답은 `response`이며 actor는 미확정이다.
+기존 분류 결과는 새 정책을 자동으로 소급 적용하지 않으므로 획득 매니페스트로 재분석한다.
 
 ### 3.3 정규화 – 신아
 

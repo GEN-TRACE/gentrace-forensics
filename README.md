@@ -9,6 +9,24 @@ GEN-TRACE 연구용 포렌식 도구. Windows 디스크 이미지(E01)에서 Chr
 - 패키지명: `gentrace_forensics`
 - CLI 진입점: `gentrace`
 
+## 아티팩트 분석·열람
+
+```bash
+# 새 E01 전체 실행
+gentrace run --image evidence.E01 --out outputs/case-new
+# 이미 획득한 프로필 재분석 (이미지 전체 해시 반복 없음)
+gentrace analyze --cache /path/to/Default/acquired.json --out outputs/review-new
+```
+
+결과는 `<out>/report/index.html`에서 연다. 실제 형식의 이미지·음성·영상, 메타데이터만 남은 항목,
+미확정 후보, 부분 복원을 구분하며 원본 위치·근거·관계를 확인할 수 있다.
+`artifacts.jsonl`, `artifacts.sqlite3`, `validation_summary.json`이 파일 자산별 최종 출력이다.
+기존 `normalized/`는 전체 캐시 관측 목록으로 유지한다. 캐시 레코드 수는 실제 파일 수가 아니다.
+
+설치된 구버전을 사용 중이면 `pip install -e ".[dev]"`로 의존성과 CLI를 갱신한다.
+소스 트리를 직접 실행하려면 `PYTHONPATH=src python -m gentrace_forensics.cli analyze ...`를 사용한다.
+출력 계약, 서비스별 판단 근거, 지원 형식과 제한은 [아티팩트 결과 안내](docs/artifact_outputs.md)를 참고한다.
+
 ## 파이프라인
 
 ```
@@ -51,7 +69,8 @@ src/gentrace_forensics/
 │   └── services/     #    서비스별 Upload/Generated 분류기
 ├── normalization/    # 3. 공통 스키마 변환·검증·저장      (신아)
 ├── pipeline.py       # 전체 실행 순서·실행 보고서
-└── cli.py            # acquire / classify / normalize / run
+├── artifacts/        # 파일 자산·근거·복원·오프라인 보고서
+└── cli.py            # acquire / classify / normalize / analyze / run
 ```
 
 파일 단위 상세는 [CONTRIBUTING.md](CONTRIBUTING.md) 5절.
