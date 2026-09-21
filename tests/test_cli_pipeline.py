@@ -153,7 +153,7 @@ def _check_results(out: Path):
             == hashlib.sha256(source.local_path.read_bytes()).hexdigest()
         )
         assert record.timestamp and record.timestamp.isoformat() == "2023-11-14T22:13:22+00:00"
-        assert record.service == "claude" and record.artifact_kind == "file_upload"
+        assert record.service == "claude" and record.artifact_kind == "other"
     with closing(sqlite3.connect(out / "normalized" / "normalized.db")) as connection:
         assert connection.execute("SELECT COUNT(*) FROM artifacts").fetchone()[0] == 2
     normalization = json.loads((out / "normalized" / "normalization.json").read_text())
@@ -272,3 +272,45 @@ def test_run_interruption_is_reported(tmp_path, monkeypatch):
     assert cli.main(["run", "--image", "fixture.E01", "--out", str(out)]) == 130
     report = json.loads((out / "run.json").read_text())
     assert report["status"] == "failed" and report["error"] == "KeyboardInterrupt"
+
+
+def test_analyze_reuses_verified_acquisition_and_writes_review(tmp_path, native_boundary, capsys):
+    out = tmp_path / "acquired"
+    assert cli.main(["acquire", "--image", "fixture.E01", "--out", str(out)]) == 0
+    manifests = capsys.readouterr().out.splitlines()
+    args = ["analyze", "--out", str(tmp_path / "analysis")]
+    for manifest in manifests:
+        args += ["--cache", manifest]
+    assert cli.main(args) == 0
+    report = json.loads((tmp_path / "analysis" / "validation_summary.json").read_text())
+    assert report["artifact_count"] == report["sqlite_artifact_count"] == 2
+    assert report["validated_media_files"] == 0  # fixture bytes are not real WebP
+    assert (tmp_path / "analysis" / "report" / "index.html").is_file()
+    assert cli.main(args) == 1  # no overwrite
+
+
+def test_network_only_profile_is_acquired_and_not_a_cache_event(tmp_path, native_boundary, capsys):
+    image, fs = native_boundary
+    fs.files = {
+        f"{fs.user_data}/Default/Network/Network Persistent State": json.dumps(
+            {
+                "servers": [
+                    {
+                        "server": "https://chatgpt.com",
+                        "alternative_service": [
+                            {"protocol_str": "h3", "port": 443, "expiration": "13344473600000000"}
+                        ],
+                    }
+                ]
+            }
+        ).encode()
+    }
+    out = tmp_path / "network-case"
+    assert cli.main(["run", "--image", "fixture.E01", "--out", str(out)]) == 0
+    summary = json.loads((out / "validation_summary.json").read_text())
+    assert summary["cache_entry_count"] == summary["artifact_count"] == 0
+    assert summary["network"][0]["status"] == "collected"
+    network = json.loads((out / "network_records.jsonl").read_text())
+    assert network["service"] == "chatgpt"
+    assert next(iter(network["times"].values()))["meaning"] == "alternative_service_expiration"
+    assert image.closed

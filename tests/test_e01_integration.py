@@ -93,3 +93,28 @@ def test_native_e01_pipeline(tmp_path: Path) -> None:
     assert checked == report["classified_count"]
     summary = json.loads((out / "normalized" / "normalization.json").read_text(encoding="utf-8"))
     assert summary["classified_sha256"] == _sha256(classified_path)
+
+    from gentrace_forensics.artifacts.models import Artifact
+
+    artifact_summary = json.loads((out / "validation_summary.json").read_text())
+    assert artifact_summary["cache_entry_count"] == checked
+    assets = [
+        Artifact.model_validate_json(line)
+        for line in (out / "artifacts.jsonl").read_bytes().splitlines()
+    ]
+    assert len(assets) == artifact_summary["artifact_count"] == report["artifact_count"]
+    assert (out / "report" / "index.html").is_file()
+    for asset in assets:
+        assert asset.source_refs
+        if asset.attribution == "pattern_candidate":
+            assert asset.role == "unknown"
+        for file in asset.files:
+            if file.path:
+                assert _sha256(out / file.path) == file.sha256
+                assert (out / file.path).stat().st_size == file.size
+            if file.recovery_status == "complete":
+                assert file.validation["format_status"] == "valid"
+                assert file.validation["coverage_complete"] is True
+                assert file.representation != "fragment"
+    with closing(sqlite3.connect(out / "artifacts.sqlite3")) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM artifacts").fetchone()[0] == len(assets)

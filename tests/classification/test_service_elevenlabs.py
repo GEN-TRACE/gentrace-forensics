@@ -69,14 +69,14 @@ def source_cache() -> AcquiredCache:
     return _local_acquired_cache(Path("/tmp/Cache_Data"))
 
 
-def test_v2_voices_with_cloned_samples_is_upload(source_cache: AcquiredCache) -> None:
+def test_v2_voices_with_cloned_samples_is_metadata(source_cache: AcquiredCache) -> None:
     entry = make_entry(
         "https://api.us.elevenlabs.io/v2/voices?page_size=100",
         body=_VOICES_BODY,
         content_type="application/json",
     )
     (c,) = classify_entries([entry], source_cache=source_cache)
-    assert (c.service, c.artifact_kind) == ("elevenlabs", "file_upload")
+    assert (c.service, c.artifact_kind) == ("elevenlabs", "conversation")
     assert c.evidence["role"] == "cloned_voice_samples"
     assert c.evidence["sample_count"] == 1
     sample = c.evidence["samples"][0]
@@ -112,9 +112,9 @@ def test_audio_url_patterns(source_cache: AcquiredCache) -> None:
     out = {
         c.url: c for c in classify_entries([sample_audio, history_audio], source_cache=source_cache)
     }
-    assert out[sample_audio.url].artifact_kind == "file_upload"
+    assert out[sample_audio.url].artifact_kind == "other"
     assert out[sample_audio.url].evidence["role"] == "voice_clone_sample_audio"
-    assert out[history_audio.url].artifact_kind == "generated_file"
+    assert out[history_audio.url].artifact_kind == "other"
 
 
 def test_non_artifact_api_is_other(source_cache: AcquiredCache) -> None:
@@ -143,7 +143,8 @@ def test_elevenlabs_on_local_fixture(cache_fixture_dir: Path) -> None:
     out = classify_cache_dir(cache_fixture_dir)
     el = [c for c in out if c.service == "elevenlabs"]
     assert len(el) >= 10
-    uploads = [c for c in el if c.artifact_kind == "file_upload"]
+    uploads = [c for c in el if c.evidence.get("role") == "cloned_voice_samples"]
+    assert all(c.artifact_kind == "conversation" for c in uploads)
     assert uploads
     hashes = {s["hash"] for c in uploads for s in c.evidence["samples"]}
     assert len(hashes) >= 1

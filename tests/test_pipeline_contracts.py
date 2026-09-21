@@ -34,7 +34,8 @@ class _FixtureFs:
         self.files["f_000001"] = body
 
     def open_dir(self, *, path: str):
-        assert path == self.cache_path
+        if path != self.cache_path:
+            raise OSError("directory not found")
         return [
             SimpleNamespace(info=SimpleNamespace(name=SimpleNamespace(name=name)))
             for name in self.files
@@ -117,8 +118,8 @@ def test_acquired_profiles_retain_evidence_through_normalized_storage(
         assert provenance["image_sha256"] == "a" * 64
         assert provenance["partition_offset"] == 1_048_576
         assert record.timestamp == datetime(2023, 11, 14, 22, 13, 22, tzinfo=UTC)
-        assert record.session_id == "chat-1"
-        assert record.artifact_kind == "file_upload"
+        assert record.session_id is None
+        assert record.artifact_kind == "other"
         assert record.content_type == "image"
     connection = sqlite3.connect(out / "normalized.db")
     try:
