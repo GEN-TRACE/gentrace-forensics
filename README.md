@@ -1,211 +1,229 @@
-# gentrace-forensics
+# GEN-TRACE
 
-GEN-TRACE 연구용 포렌식 도구. Windows 디스크 이미지(E01)에서 Chrome 캐시를 획득하고,
-생성형 AI 서비스(ChatGPT, Claude, Gemini, Veo 3, ElevenLabs)의 **File Upload / Generated File 아티팩트**를
-분류한 뒤, 공통 스키마로 정규화해 타임라인·상관분석이 가능한 형태로 저장한다.
+**Chrome 캐시에 남은 생성형 AI 서비스의 파일 흔적을 분석하는 연구용 디지털 포렌식 도구입니다.**
 
-- Repo: https://github.com/GEN-TRACE/gentrace-forensics
-- 언어: Python 3.11+
-- 패키지명: `gentrace_forensics`
-- CLI 진입점: `gentrace`
+Windows E01 이미지에서 Chrome 캐시를 획득하고, 서비스별 규칙으로 파일 관련 기록을
+분류한 뒤 JSONL·SQLite로 정규화합니다. 캐시 본문과 함께 원본 이미지·프로필·파일 위치·해시를
+보존하여 분석 결과를 원본 자료와 대조할 수 있도록 합니다.
 
-## 파이프라인
+## 주요 기능
 
-```
-E01 이미지
-   │  (1) 획득 – 예은      src/gentrace_forensics/acquisition/
-   ▼
-Cache_Data 원본 (index, data_0~3, f_XXXXXX) + 출처 메타데이터        [AcquiredCache]
-   │  (2) 분류 – 지민      src/gentrace_forensics/classification/
-   ▼
-캐시 엔트리 목록 (URL, Content-Type, 압축 해제 본문, 서비스, upload/generated) [ClassifiedEntry]
-   │  (3) 정규화 – 신아    src/gentrace_forensics/normalization/
-   ▼
-Common Schema (SQLite / JSONL) → 타임라인, 통합 검색, 상관분석        [NormalizedArtifact]
-```
+- **캐시 획득**: E01의 NTFS 파티션과 Chrome 프로필을 탐색해 `Cache_Data`를 추출합니다.
+- **출처와 무결성 기록**: 논리 디스크 및 추출 파일의 SHA-256과 원본 위치를 남깁니다.
+- **캐시 파싱·분류**: Blockfile 캐시의 URL·HTTP 헤더·본문을 읽고 서비스별 파일 관련 규칙을 적용합니다.
+- **정규화·저장**: 캐시 관측을 공통 스키마의 JSONL·SQLite로 저장하고, 분류 기록과 본문을 함께 보존합니다.
+- **단계별 실행**: 획득·분류·정규화를 따로 실행하거나 `run`으로 연결합니다. 실행 상태와 실패 단계를 기록합니다.
 
-## 팀 및 담당 범위
+## 분석 범위와 기능 상태
 
-| 단계 | 담당 | 폴더 | 역할 |
-| --- | --- | --- | --- |
-| 1. 획득 | 예은 | [acquisition/](src/gentrace_forensics/acquisition/) | E01에서 Chrome `Cache_Data` 원본 파일 추출 |
-| 2. 분류 | 지민 | [classification/](src/gentrace_forensics/classification/) | Blockfile 캐시 파싱 + 서비스별 Upload/Generated 분류 |
-| 3. 정규화 | 신아 | [normalization/](src/gentrace_forensics/normalization/) | 분류 결과를 공통 스키마로 변환·검증·저장 |
+| 항목 | 현재 `main`에서 지원하는 범위 |
+|---|---|
+| 입력 | Windows E01 이미지 또는 획득 매니페스트 `acquired.json` |
+| 분석 대상 | Chrome `Cache/Cache_Data`의 Blockfile 캐시: `index`, `data_N`, `f_…` |
+| 서비스별 분류 규칙 | ChatGPT, Claude, Gemini, DeeVid(Veo), ElevenLabs |
+| CLI | `acquire`, `classify`, `normalize`, `run` |
+| 분석에 포함하지 않는 자료 | Downloads의 사용자 파일, 브라우저 History, 디스크 전체 파일 카빙 |
 
-**규칙**
+**아티팩트 복원·HTML 보고서·`analyze` 명령은 [PR #26](https://github.com/GEN-TRACE/gentrace-forensics/pull/26)의 변경 사항이며, 현재 `main`에는 아직 포함되지 않았습니다.**
+인덱스 밖 캐시 엔트리 복원, 선별 아티팩트 저장, 네트워크 상태 분석도 해당 PR에서 다룹니다.
+아래 실행 안내와 결과 경로는 현재 `main` 기준입니다.
 
-- 각자 자기 폴더만 수정한다. 다른 사람 폴더를 건드려야 하면 PR에서 멘션.
-- 단계 사이의 데이터 계약은 [schemas/](src/gentrace_forensics/schemas/)에 Pydantic 모델로 두고, 셋이 합의 후에만 변경한다.
-- `main`은 PR로만 머지. 브랜치명: `feat/acquisition`, `feat/classification`, `feat/normalization`, 작은 작업은 `feat/<설명>`.
-- 커밋 메시지는 **영어**, 형식 `[ <type> ] <설명>` (예: `[ chore ] scaffold project structure`). `type` = `feat`/`fix`/`chore`/`docs`/`test`/`refactor`. 자세한 규칙은 [CONTRIBUTING.md](CONTRIBUTING.md) 8절.
-- 실제 증거 이미지·캐시 원본은 **절대 커밋하지 않는다**. `samples/`에는 익명화된 소형 테스트 샘플만 둔다.
-
-## 프로젝트 구조
-
-```
-src/gentrace_forensics/
-├── schemas/          # 단계 간 데이터 계약 (Pydantic 모델)
-├── acquisition/      # 1. E01 → Cache_Data 추출         (예은)
-├── classification/   # 2. blockfile 파싱 + 서비스 분류   (지민)
-│   ├── blockfile/    #    Chrome blockfile 캐시 파서
-│   └── services/     #    서비스별 Upload/Generated 분류기
-├── normalization/    # 3. 공통 스키마 변환·검증·저장      (신아)
-├── pipeline.py       # 전체 실행 순서·실행 보고서
-└── cli.py            # acquire / classify / normalize / run
-```
-
-파일 단위 상세는 [CONTRIBUTING.md](CONTRIBUTING.md) 5절.
+서비스별 분류 결과는 규칙에 따른 판단입니다. 캐시에 파일 전달 기록이 남았다는 사실만으로
+사용자의 업로드·생성 행위를 확정하지 않습니다. 지원하는 패턴은
+[서비스별 분류 근거](docs/service_patterns.md)를 참고하세요.
 
 ## 설치
 
-E01 이미지를 여는 데 네이티브 라이브러리(`libewf`, `libtsk`)가 필요하다.
-**Windows 사용자는 WSL-Ubuntu** 에서 실행한다.
-
-### Windows (WSL-Ubuntu) — 자동
-
-```powershell
-wsl --install -d Ubuntu        # PowerShell(관리자), 최초 1회. 재부팅 후 WSL 진입
-```
+Python **3.11 이상**이 필요합니다. 저장소를 받은 뒤 프로젝트 폴더에서 설치합니다.
 
 ```bash
 git clone https://github.com/GEN-TRACE/gentrace-forensics.git
 cd gentrace-forensics
-sed -i 's/\r$//' setup_wsl.sh && bash ./setup_wsl.sh
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+```
+
+이미 획득한 캐시를 분석하는 경우:
+
+```bash
+python -m pip install -e .
+```
+
+E01에서 직접 획득하는 경우:
+
+```bash
+python -m pip install -e ".[acquisition]"
+```
+
+E01 획득에는 `pyewf`·`pytsk3` 네이티브 바인딩이 필요합니다. 운영체제와 Python 버전에 따라
+빌드 도구와 라이브러리 설치가 추가로 필요할 수 있습니다. Windows에서는 **WSL-Ubuntu**를 사용합니다.
+
+<details>
+<summary>Windows / WSL-Ubuntu 설치</summary>
+
+관리자 PowerShell에서 WSL을 설치합니다.
+
+```powershell
+wsl --install -d Ubuntu
+```
+
+설치 후 Ubuntu 터미널에서 저장소를 받고 자동 설치 스크립트를 실행합니다.
+
+```bash
+git clone https://github.com/GEN-TRACE/gentrace-forensics.git
+cd gentrace-forensics
+sed -i 's/\r$//' setup_wsl.sh
+bash ./setup_wsl.sh
 source ~/venvs/gentrace/bin/activate
 ```
 
-### Windows (WSL-Ubuntu) — 수동
+수동 설치 시 필요한 시스템 패키지:
 
 ```bash
 sudo apt update
 sudo apt install -y python3-venv python3-dev build-essential pkg-config \
     libtsk-dev libewf-dev libbde-dev libfsntfs-dev
-
-python3 -m venv --prompt gentrace ~/venvs/gentrace
-source ~/venvs/gentrace/bin/activate
-pip install --upgrade pip setuptools wheel
-pip install -e ".[dev,acquisition]"
 ```
 
-### 분류·정규화만 (E01 안 다룸)
+이후 Python 3.11 이상인 환경에서 위의 가상환경 생성 및 `.[acquisition]` 설치를 진행합니다.
 
-`acquisition` extras 없이 순수 파이썬으로 어디서든:
+</details>
+
+설치 확인:
 
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install --upgrade pip          # 구버전 pip 는 editable 설치가 깨짐
-pip install -e ".[dev]"
+gentrace --help
 ```
-
-> blockfile 파서 대조·검증용 `ccl_chromium_reader`(GitHub 설치)까지:
-> `pip install -e ".[dev,reference]"` — git 이 필요하다.
 
 ## 실행
 
-전체 실행은 첫 번째 E01 세그먼트를 지정한다. `acquisition` 의존성이 필요하며,
-`--out`에는 아직 존재하지 않는 새 실행 폴더를 사용한다.
+### E01부터 전체 실행
 
 ```bash
-gentrace run --image /path/to/disk.E01 --out outputs/case-01/
+gentrace run --image "/path/to/evidence.E01" --out outputs/case-01
 ```
 
-실행은 NTFS·Chrome 프로필 탐색 → 논리 디스크 SHA-256 계산 → 프로필별 캐시 추출 →
-분류 → 정규화 순서다. 논리 디스크 전체를 읽는 해시 계산은 이미지 크기에 따라
-오래 걸릴 수 있으며 10% 단위로 진행률을 출력한다.
+첫 번째 `.E01`을 지정하고 분할 세그먼트는 같은 폴더에 둡니다.
+프로필 탐색 → 논리 디스크 해시 계산 → 캐시 획득 → 분류 → 정규화 순서로 실행합니다.
+디스크 전체 해시 계산은 이미지 크기와 압축 상태에 따라 오래 걸릴 수 있습니다.
+`--out`에는 아직 존재하지 않는 새 결과 폴더를 사용합니다.
+
+### 이미 획득한 캐시 분석
+
+`--cache`에는 **캐시 폴더가 아닌 `acquired.json` 경로**를 지정합니다.
+매니페스트 옆에 `Cache/Cache_Data` 원본이 있어야 합니다.
+
+```bash
+gentrace classify \
+  --cache "/path/to/Default/acquired.json" \
+  --out outputs/classified-review
+
+gentrace normalize \
+  --entries outputs/classified-review/classified.jsonl \
+  --out outputs/normalized-review
+```
+
+여러 프로필을 함께 분류하려면 `--cache`를 반복합니다.
+분류 규칙을 수정한 뒤 재분석할 때 기존 획득본을 사용하면 E01 전체 획득을 반복하지 않아도 됩니다.
+
+### 단계별 명령
+
+| 명령 | 입력과 처리 |
+|---|---|
+| `acquire` | E01에서 캐시 획득, 프로필별 `acquired.json` 경로 출력 |
+| `classify` | 획득 매니페스트에서 캐시 파싱·분류 및 본문 보존 |
+| `normalize` | 분류 JSONL을 공통 스키마 JSONL·SQLite로 변환 |
+| `run` | E01 획득부터 분류·정규화까지 실행 |
+
+획득만 실행하는 경우:
+
+```bash
+gentrace acquire --image "/path/to/evidence.E01" --out outputs/acquired-only
+```
+
+기존 결과를 덮어쓰지 않습니다. 전체 실행이 실패하면 `run.json`의 실패 단계와 오류를
+확인합니다. 완료된 앞 단계는 보존되며 자동 재개 기능은 없습니다. 완료된 획득본이나
+분류 JSONL을 입력으로 다음 단계를 새 출력 위치에 실행할 수 있습니다.
+
+## 결과 파일과 해석
+
+전체 실행 결과는 `--out`으로 지정한 폴더에 저장합니다.
 
 ```text
 outputs/case-01/
-├── run.json                      # 완료/실패 상태, 단계, 출력 경로, 건수
+├── run.json
 ├── acquired/
-│   ├── acquisition.json          # 이미지 해시와 프로필별 매니페스트 목록
+│   ├── acquisition.json
 │   └── partition_<offset>/Users/.../<profile>/
-│       ├── acquired.json         # AcquiredCache
-│       └── Cache/Cache_Data/     # 추출 원본
+│       ├── acquired.json
+│       └── Cache/Cache_Data/
 ├── classified/
 │   ├── classified.jsonl
-│   └── bodies/<프로필 식별자>/<본문 SHA-256>.bin
+│   └── bodies/<profile-id>/<sha256>.bin
 └── normalized/
     ├── normalized.jsonl
     ├── normalized.db
-    └── normalization.json        # 입력 JSONL 경로·해시와 출력 건수
+    └── normalization.json
 ```
 
-각 단계도 독립 실행할 수 있다. `acquire`는 프로필별 `acquired.json`의 절대 경로를
-표준 출력에 한 줄씩 출력한다. 그 경로를 `classify --cache`에 전달한다.
-매니페스트 옆의 `Cache/Cache_Data/`를 읽는다.
+| 경로 | 용도 |
+|---|---|
+| `run.json` | 전체 실행 상태, 단계, 출력 경로·건수, 오류 정보 |
+| `acquired/acquisition.json` | 이미지 해시와 프로필별 획득 매니페스트 목록 |
+| 프로필별 `acquired.json` | 획득 파일의 원본 위치·크기·해시 등 출처 정보 |
+| `classified/classified.jsonl` | 캐시 관측별 분류 결과·근거·경고·본문 경로 |
+| `classified/bodies/` | 보존한 응답 본문. `.bin` 확장자가 실제 파일 형식을 의미하지 않음 |
+| `normalized/normalized.jsonl` | 전체 캐시 관측의 공통 스키마 레코드 |
+| `normalized/normalized.db` | 같은 정규화 레코드를 저장한 SQLite DB |
+| `normalized/normalization.json` | 정규화 입력 해시와 출력 경로·건수 |
+
+**정규화 레코드 수는 실제 파일 수나 사용자 행동 횟수가 아닙니다.**
+JavaScript·CSS·아이콘 같은 사이트 구성 자료도 포함됩니다. 한 파일이 여러 캐시 기록으로
+남을 수 있고, 본문 없이 메타데이터만 남을 수도 있습니다.
+
+정규화 결과만으로 판단하지 말고 `classified.jsonl`의 근거와 보존 본문을 함께 확인합니다.
+`source_id`에는 이미지·파티션·프로필·엔트리를 연결하는 출처 정보가 포함됩니다.
+캐시 응답·요청·생성 시각은 파일의 실제 업로드·생성 행위 시각과 구분합니다.
+
+원본 추적을 위해 획득본과 분류 결과도 함께 보관합니다. 절대 경로로 기록된 참조는
+결과 폴더를 옮기면 재연결이 필요합니다.
+
+## 검증과 한계
+
+획득 파일·본문의 해시, 출처 연결, JSONL·SQLite 일치, 오류 처리 등을 자동 검사합니다.
+이 검사는 모든 파일 흔적의 발견이나 분류 정확도를 보장하지 않습니다.
+
+현재 `main`은 Blockfile 인덱스를 따라 기록을 읽으므로 인덱스에서 빠진 잔존 엔트리를
+놓칠 수 있습니다. 이를 보완하는 캐시 블록 복원은 PR #26에 포함되어 있습니다.
+다른 Chrome 캐시 형식, 모든 서비스 응답, 외부 도구와의 전수 일치는 검증되지 않았습니다.
+분류·정규화의 정상 종료와 증거 해석의 정확성은 구분해서 검토해야 합니다.
+
+## 개발 및 문서
+
+개발 환경은 `python -m pip install -e ".[dev]"`로 설치합니다.
+참조 파서 대조가 필요하면 Git이 설치된 환경에서 `.[dev,reference]`를 사용합니다.
 
 ```bash
-gentrace acquire --image /path/to/disk.E01 --out outputs/acquired/
-
-# 여러 프로필을 한 번에 분류해 classified.jsonl 하나로 모은다.
-gentrace classify \
-  --cache "path/to/Default/acquired.json" \
-  --cache "path/to/Profile 1/acquired.json" \
-  --out outputs/classified/
-
-gentrace normalize \
-  --entries outputs/classified/classified.jsonl \
-  --out outputs/normalized/
+ruff check src tests
+ruff format --check src tests
+mypy src
+pytest
 ```
 
-출력은 `classified.jsonl`과 `bodies/<프로필 식별자>/<본문 SHA-256>.bin`이다.
-논리 파일명은 JSONL의 `filename`에 보존한다. `body_path`는 절대 경로이므로
-다른 작업 디렉터리에서도 읽을 수 있으며, 결과 폴더를 이동하면 경로 재연결이 필요하다.
-기존 `classified.jsonl` 또는 `bodies/`가 있으면 덮어쓰지 않고 실패한다.
-모든 프로필의 처리가 성공한 뒤 결과를 공개하며, 출력 파일시스템은 hard link를
-지원해야 한다(APFS, NTFS, ext4 등).
-
-`acquire`, `normalize`, `run`은 기존 출력 폴더를 재사용하지 않는다.
-정규화는 입력을 한 번 읽고 같은 스냅샷으로 JSONL·SQLite를 만든다. 중복 `source_id`로
-DB 건수가 줄어드는 입력은 실패 처리한다. 실패한 획득·정규화 단계의 새 출력은 정리하고,
-`run`은 앞서 완료한 단계와 실패 단계·오류를 담은 `run.json`을 보존한다.
-오류 시 종료 코드는 1, 사용자 중단 시 130이다. 기존 완료 단계의 파일을 입력으로
-다음 명령을 별도 실행할 수 있으며, 자동 재개 기능은 제공하지 않는다.
-
-현재 분류기는 Blockfile 캐시를 지원한다. 다른 캐시 형식이나 필요한 파일이 누락된
-프로필은 분류 단계에서 실패하며, 전체 실행을 성공한 것으로 기록하지 않는다.
-
-정규화한 SQLite·JSONL만 보관하면 분류 근거·파싱 경고·본문 경로를 직접 확인할 수 없다.
-`classified.jsonl`과 `bodies/`를 함께 보관하고, 정규화 레코드의 `source_id`에 담긴
-이미지·파티션·프로필·`entry_id`로 분류 결과를 연결한다. 캐시 응답·요청·생성 시각은
-파일의 실제 업로드·생성 행위 시각과 같다고 단정하지 않는다.
-
-## 검증 기준
-
-- 분류 파서 결과는 ChromeCacheView, Hindsight 결과와 대조한다. 엔트리 수, URL, Content-Type, 크기가 일치해야 한다.
-- HTTP 본문은 gzip, deflate, Brotli, Zstandard를 해제한다. 외부 공유 사전이 필요한 `dcb`/`dcz`는 원문을 보존하고 파싱 경고를 기록한다.
-- 모든 출력 레코드는 원본 E01 → 파일 → 오프셋까지 역추적 가능해야 한다.
-- 추측으로 채우는 필드는 없다. 모르면 `None`.
-
-단계 간 경로·출처·저장 계약은 `tests/test_pipeline_contracts.py`에서 검증한다.
-`tests/test_cli_pipeline.py`는 네이티브 이미지 접근만 대체하고 합성 Blockfile을 실제
-파서로 읽어 네 명령을 검사한다. 정규화 시간·URL·저장 테스트는 `tests/normalization/`에 있다.
-
-실제 E01 전체 검증은 로컬 이미지 경로를 명시해 실행한다. Chrome Blockfile 캐시가
-있는 이미지를 사용하며, 분할 세그먼트는 같은 폴더에 둔다.
+실제 E01 전체 실행 테스트는 `.[dev,acquisition]` 설치 후 별도로 실행합니다.
 
 ```bash
-pip install -e ".[dev,acquisition]"
-GENTRACE_E01_FIXTURE="/path/to/disk.E01" \
-GENTRACE_E01_OUTPUT="outputs/e01-validation-01" \
+GENTRACE_E01_FIXTURE="/path/to/evidence.E01" \
+GENTRACE_E01_OUTPUT="outputs/e01-validation-new" \
   python -m pytest -q -s tests/test_e01_integration.py
 ```
 
-검증은 실제 `run`을 실행한 후 추출 파일·본문의 해시, 프로필별 출처, JSONL·SQLite의
-전체 레코드 일치, 분류 입력 파일의 해시를 확인한다. 출력 폴더는 새 경로여야 한다.
-`GENTRACE_E01_OUTPUT`을 생략하면 pytest 임시 폴더를 사용한다.
-`GENTRACE_E01_FIXTURE`가 없으면 해당 테스트를 **skip**하며, CI 통과만으로 실제 E01
-전체 검증까지 완료했다고 해석하지 않는다. 이미지·원본 캐시·실행 결과는 커밋하지 않는다.
+이미지 경로가 없으면 이 테스트는 건너뜁니다. CI 통과와 실제 E01 검증은 구분합니다.
+실제 증거 이미지·캐시·분석 결과는 저장소에 커밋하지 않습니다.
 
-## 문서
-
-- [CONTRIBUTING.md](CONTRIBUTING.md) — 팀 규칙, 파이프라인 상세, 데이터 계약, 커밋 규칙
-- [docs/git_workflow.md](docs/git_workflow.md) — 브랜치·커밋·PR 복붙용 절차
-- [SECURITY.md](SECURITY.md) — CI 자동 검사 목록, 데이터 취급 원칙
-- [docs/blockfile_format.md](docs/blockfile_format.md) — 구조체 정리, 헥스 대조 결과
-- [docs/service_patterns.md](docs/service_patterns.md) — 서비스별 분류 패턴 표
-
-## 코드 검사 (CI)
-
-PR을 올리면 GitHub Actions가 자동으로 lint · 타입 · 테스트 · 보안 스캔(bandit, pip-audit, CodeQL) · 증거/비밀 파일 가드를 돌린다.
-전부 통과해야 머지할 수 있다. 자세한 목록은 [SECURITY.md](SECURITY.md).
+- [기여 안내](CONTRIBUTING.md) — 팀 담당 범위, 데이터 계약, 개발 규칙
+- [Git 작업 절차](docs/git_workflow.md) — 브랜치·커밋·PR 규칙
+- [서비스별 분류 근거](docs/service_patterns.md) — 역할과 후보 판단 기준
+- [캐시 포맷](docs/blockfile_format.md) — Blockfile 구조와 복원 방식
+- [보안 안내](SECURITY.md) — 데이터 취급과 CI 검사
