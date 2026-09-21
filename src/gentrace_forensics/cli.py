@@ -1,9 +1,9 @@
 """`gentrace` CLI 진입점.
 
-서브커맨드 골격만 둔다. 각 단계 구현은 담당 폴더에서 진행.
+classify는 프로필별 매니페스트를 받아 실행한다. acquire / normalize / run은 연결 예정.
 
     gentrace acquire   --image disk.E01 --out outputs/
-    gentrace classify  --cache outputs/acquired.json --out outputs/
+    gentrace classify  --cache path/to/profile/acquired.json --out outputs/classified/
     gentrace normalize --entries outputs/classified.json --out outputs/
     gentrace run       --image disk.E01 --out outputs/   # 전체 파이프라인
 """
@@ -25,7 +25,12 @@ def _add_acquire(sub: argparse._SubParsersAction) -> None:
 
 def _add_classify(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("classify", help="Blockfile 파싱 + 서비스 분류 (지민)")
-    p.add_argument("--cache", required=True, help="AcquiredCache JSON 경로")
+    p.add_argument(
+        "--cache",
+        required=True,
+        action="append",
+        help="AcquiredCache JSON 경로 (여러 번 지정 가능)",
+    )
     p.add_argument("--out", required=True, help="출력 디렉터리")
     p.set_defaults(func=cmd_classify)
 
@@ -49,24 +54,11 @@ def cmd_acquire(args: argparse.Namespace) -> int:
 
 
 def cmd_classify(args: argparse.Namespace) -> int:
-    from gentrace_forensics.classification.classify import classify_cache
-    from gentrace_forensics.schemas.acquisition import AcquiredCache
+    from gentrace_forensics.classification.output import classify_manifests
 
-    manifest_path = Path(args.cache)
-    cache = AcquiredCache.model_validate_json(manifest_path.read_text(encoding="utf-8"))
-    cache_dir = manifest_path.parent / "Cache" / "Cache_Data"
-
-    out_dir = Path(args.out)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    entries = classify_cache(cache, cache_dir, body_dir=out_dir / "bodies")
-
-    out_path = out_dir / "classified.jsonl"
-    with out_path.open("w", encoding="utf-8", newline="\n") as f:
-        for entry in entries:
-            f.write(entry.model_dump_json())
-            f.write("\n")
-
-    print(f"classified {len(entries)} entries -> {out_path}", file=sys.stderr)
+    out_dir = Path(args.out).resolve()
+    count = classify_manifests([Path(path) for path in args.cache], out_dir)
+    print(f"classified {count} entries -> {out_dir / 'classified.jsonl'}", file=sys.stderr)
     return 0
 
 

@@ -90,17 +90,24 @@ data_1: c3ca 04c1 0000 0200 0100 0000 0001 0000 2e03 0000 0008 0000 ...
 
 ### EntryStore (data_1 블록)
 
-```
-TODO: 실제 엔트리 헥스 덤프 + 필드 매핑 (hash, next, key_len, data_addr[4], creation_time ...)
-       — index.py 로 CacheAddr 는 수집했으나, entry.py(EntryStore 실제 읽기 + Stream 0/1)는
-       다음 단계에서 구현.
-```
+`structs.EntryStore`와 `entry.read_entry()`에 구현되어 있다. `hash`, `next`,
+`key_len`, `data_addr[4]`, `creation_time`과 인라인/외부 키를 읽는다.
+`entry.iter_entries()`가 index 슬롯의 충돌 체인을 따라 순회한다.
+실제 엔트리 헥스 덤프를 문서에 추가하는 작업은 남아 있다.
 
 ### Stream 0 (HTTP 응답 헤더 pickle)
 
-```
-TODO: 포맷 확인 (헤더 문자열 blob, `\0` 구분, status line 포함) — entry.py 구현 시 진행.
-```
+`entry._parse_response_info()`에 구현되어 있다. payload 크기·flags·선택적 extra flags,
+요청·응답 시각, 선택적 original response time, NUL 구분 헤더 blob 순서로 읽는다.
+요청·응답 시각은 raw WebKit microseconds로 정규화 단계까지 전달하며, 0은 `None`으로
+취급한다. 합성 pickle 테스트와 로컬 픽스처의 참조 파서 시각 대조 테스트가 있다.
+
+### 출처 위치
+
+`entry.data_location()`으로 본문 읽기와 출처 기록에 같은 경로 해석을 사용한다.
+`f_XXXXXX.png`처럼 확장자가 붙은 로컬 외부 파일도 실제 이름을 기록한다.
+본문이 없거나 읽지 못했으면 해당 EntryStore의 파일·오프셋을 기록한다.
+획득 원본 파일 해시와 압축 해제된 본문 해시는 별개다.
 
 ## 캐시 키 접두어
 

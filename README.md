@@ -50,7 +50,7 @@ src/gentrace_forensics/
 │   ├── blockfile/    #    Chrome blockfile 캐시 파서
 │   └── services/     #    서비스별 Upload/Generated 분류기
 ├── normalization/    # 3. 공통 스키마 변환·검증·저장      (신아)
-└── cli.py            # gentrace acquire / classify / normalize / run
+└── cli.py            # classify 연결 완료; acquire / normalize / run 연결 예정
 ```
 
 파일 단위 상세는 [CONTRIBUTING.md](CONTRIBUTING.md) 5절.
@@ -101,14 +101,33 @@ pip install -e ".[dev]"
 
 ## 실행
 
+현재 실행 가능한 CLI는 `classify`이다. 획득 모듈이 프로필별로 만든
+`acquired.json` 경로를 전달한다. 매니페스트 옆의 `Cache/Cache_Data/`를 읽는다.
+
 ```bash
-gentrace acquire   --image disk.E01              --out outputs/
-gentrace classify  --cache outputs/acquired.json --out outputs/
-gentrace normalize --entries outputs/classified.jsonl --out outputs/
-gentrace run       --image disk.E01              --out outputs/   # 전체 파이프라인
+gentrace classify --cache "path/to/Default/acquired.json" --out outputs/classified/
+
+# 여러 프로필을 한 번에 분류해 classified.jsonl 하나로 모은다.
+gentrace classify \
+  --cache "path/to/Default/acquired.json" \
+  --cache "path/to/Profile 1/acquired.json" \
+  --out outputs/classified-multiple/
 ```
 
-> 현재는 스캐폴드 상태. 각 서브커맨드는 `NotImplementedError` 를 던진다.
+출력은 `classified.jsonl`과 `bodies/<프로필 식별자>/<본문 SHA-256>.bin`이다.
+논리 파일명은 JSONL의 `filename`에 보존한다. `body_path`는 절대 경로이므로
+다른 작업 디렉터리에서도 읽을 수 있으며, 결과 폴더를 이동하면 경로 재연결이 필요하다.
+기존 `classified.jsonl` 또는 `bodies/`가 있으면 덮어쓰지 않고 실패한다.
+모든 프로필의 처리가 성공한 뒤 결과를 공개하며, 출력 파일시스템은 hard link를
+지원해야 한다(APFS, NTFS, ext4 등).
+
+획득·정규화 모듈은 구현되어 있지만 `acquire`, `normalize`, `run` CLI는 아직
+`NotImplementedError`를 발생시킨다. E01부터 전체 실행하는 CLI 연결은 후속 작업이다.
+
+정규화한 SQLite·JSONL만 보관하면 분류 근거·파싱 경고·본문 경로를 직접 확인할 수 없다.
+`classified.jsonl`과 `bodies/`를 함께 보관하고, 정규화 레코드의 `source_id`에 담긴
+이미지·파티션·프로필·`entry_id`로 분류 결과를 연결한다. 캐시 응답·요청·생성 시각은
+파일의 실제 업로드·생성 행위 시각과 같다고 단정하지 않는다.
 
 ## 검증 기준
 
@@ -116,6 +135,10 @@ gentrace run       --image disk.E01              --out outputs/   # 전체 파�
 - HTTP 본문은 gzip, deflate, Brotli, Zstandard를 해제한다. 외부 공유 사전이 필요한 `dcb`/`dcz`는 원문을 보존하고 파싱 경고를 기록한다.
 - 모든 출력 레코드는 원본 E01 → 파일 → 오프셋까지 역추적 가능해야 한다.
 - 추측으로 채우는 필드는 없다. 모르면 `None`.
+
+단계 간 경로·출처·저장 계약은 `tests/test_pipeline_contracts.py`에서 합성
+파일시스템으로 검증한다. 정규화 시간·URL·저장 테스트는 `tests/normalization/`에 있다.
+이 테스트들은 네이티브 라이브러리와 실제 E01을 사용하는 전체 실행 검증을 대신하지 않는다.
 
 ## 문서
 

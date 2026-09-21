@@ -16,9 +16,7 @@ from gentrace_forensics.classification.blockfile._ccl_backend import (
     RawCacheEntry,
     looks_like_blockfile_cache,
 )
-from gentrace_forensics.classification.blockfile.addr import FileType
 from gentrace_forensics.classification.blockfile.structs import (
-    BLOCK_HEADER_SIZE,
     ENTRY_DOOMED,
     ENTRY_EVICTED,
     ENTRY_NORMAL,
@@ -29,14 +27,13 @@ __all__ = ["RawCacheEntry", "iter_raw_entries", "looks_like_blockfile_cache"]
 _STATE_NAMES = {ENTRY_NORMAL: "normal", ENTRY_EVICTED: "evicted", ENTRY_DOOMED: "doomed"}
 
 
-def _source_location(entry: _entry.CacheEntry) -> tuple[str, int]:
-    """Stream 1(본문)이 실제로 저장된 파일명과 오프셋."""
-    addr = entry.stream_addrs[1]
-    if not addr.is_initialized:
-        return "?", 0
-    if addr.file_type == FileType.EXTERNAL:
-        return f"f_{addr.external_file_number:06x}", 0
-    return f"data_{addr.block_file_number}", addr.file_offset(BLOCK_HEADER_SIZE)
+def _source_location(
+    cache_dir: Path, entry: _entry.CacheEntry, *, has_body: bool
+) -> tuple[str, int]:
+    """본문의 실제 위치. 본문이 없거나 읽지 못했으면 EntryStore 위치를 보존한다."""
+    addr = entry.stream_addrs[1] if has_body else entry.addr
+    path, offset = _entry.data_location(cache_dir, addr)
+    return path.name, offset
 
 
 def iter_raw_entries(cache_dir: str | Path) -> Iterator[RawCacheEntry]:
@@ -54,7 +51,7 @@ def iter_raw_entries(cache_dir: str | Path) -> Iterator[RawCacheEntry]:
             body = b""
             warnings.append(f"body read failed: {exc}")
 
-        source_file, source_offset = _source_location(cache_entry)
+        source_file, source_offset = _source_location(src, cache_entry, has_body=bool(body))
         creation_time_us = cache_entry.store.creation_time or None
 
         yield RawCacheEntry(
@@ -70,5 +67,7 @@ def iter_raw_entries(cache_dir: str | Path) -> Iterator[RawCacheEntry]:
             entry_hash=cache_entry.store.hash,
             entry_state=_STATE_NAMES.get(cache_entry.store.state, "normal"),
             creation_time_us=creation_time_us,
+            request_time_us=info.request_time_us,
+            response_time_us=info.response_time_us,
             warnings=warnings,
         )

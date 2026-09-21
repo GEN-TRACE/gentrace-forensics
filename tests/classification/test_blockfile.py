@@ -93,10 +93,10 @@ def test_gzip_bodies_are_decompressed(entries: list[ParsedCacheEntry]) -> None:
         assert not e.body.startswith(b"\x1f\x8b")
 
 
-def test_source_file_is_recorded(entries: list[ParsedCacheEntry]) -> None:
+def test_source_file_is_recorded(entries: list[ParsedCacheEntry], cache_fixture_dir: Path) -> None:
     for e in entries:
-        assert e.source_file
-        assert e.source_file == "?" or e.source_file.startswith(("data_", "f_"))
+        assert (cache_fixture_dir / e.source_file).is_file()
+        assert e.source_offset >= 0
 
 
 def test_timestamps_present(entries: list[ParsedCacheEntry]) -> None:

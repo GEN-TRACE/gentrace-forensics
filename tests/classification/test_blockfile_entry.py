@@ -11,16 +11,25 @@ from __future__ import annotations
 import hashlib
 import re
 import struct
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from gentrace_forensics.classification.blockfile import entry
+from gentrace_forensics.classification.blockfile import _self_backend, entry
 from gentrace_forensics.classification.blockfile._ccl_backend import iter_raw_entries
+from gentrace_forensics.classification.blockfile.addr import CacheAddr
+from gentrace_forensics.classification.blockfile.parser import parse_cache_dir
+from gentrace_forensics.classification.blockfile.structs import BLOCK_HEADER_SIZE, EntryStore
 
 
 def _build_stream0_pickle(
-    *, status_line: str = "HTTP/1.1 200 OK", headers: dict[str, str] | None = None
+    *,
+    status_line: str = "HTTP/1.1 200 OK",
+    headers: dict[str, str] | None = None,
+    request_time_us: int = 0,
+    response_time_us: int = 0,
+    original_response_time_us: int | None = None,
 ) -> bytes:
     """Stream 0 pickle 합성 바이트를 만든다 (entry._parse_response_info 테스트용)."""
     headers = headers or {}
@@ -28,9 +37,13 @@ def _build_stream0_pickle(
     header_blob = b"\x00".join(p.encode("latin-1") for p in parts) + b"\x00\x00"
     padded = header_blob + b"\x00" * (-len(header_blob) % 4)
 
-    payload = struct.pack("<I", 0)  # flags (no extra flags bit)
-    payload += struct.pack("<q", 0)  # request_time
-    payload += struct.pack("<q", 0)  # response_time
+    payload = struct.pack("<I", 0 if original_response_time_us is None else 1 << 31)
+    if original_response_time_us is not None:
+        payload += struct.pack("<I", 1 << 2)
+    payload += struct.pack("<q", request_time_us)
+    payload += struct.pack("<q", response_time_us)
+    if original_response_time_us is not None:
+        payload += struct.pack("<q", original_response_time_us)
     payload += struct.pack("<I", len(header_blob))
     payload += padded
 
@@ -46,6 +59,66 @@ def test_parse_response_info_extracts_status_and_headers() -> None:
     assert info.status == 404
     assert info.get("content-type") == "application/json"
     assert info.get("x-custom") == "value"
+    assert info.request_time_us is None
+    assert info.response_time_us is None
+
+
+@pytest.mark.parametrize("original_response_time_us", [None, 13_400_000_000_000_001])
+def test_response_times_survive_optional_pickle_fields(
+    original_response_time_us: int | None,
+) -> None:
+    buf = _build_stream0_pickle(
+        headers={"Content-Type": "text/plain"},
+        request_time_us=13_400_000_000_000_003,
+        response_time_us=13_400_000_000_000_005,
+        original_response_time_us=original_response_time_us,
+    )
+    info = entry._parse_response_info(buf)
+    assert info.request_time_us == 13_400_000_000_000_003
+    assert info.response_time_us == 13_400_000_000_000_005
+    assert info.get("content-type") == "text/plain"
+
+
+@pytest.mark.parametrize("body_name", ["f_000011", "f_000011.png", None])
+def test_backend_preserves_timestamps_and_resolvable_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, body_name: str | None
+) -> None:
+    for name in ("index", "data_0", "data_1", "data_2", "data_3"):
+        (tmp_path / name).touch()
+    metadata = _build_stream0_pickle(
+        request_time_us=13_400_000_000_000_003,
+        response_time_us=13_400_000_000_000_005,
+    )
+    (tmp_path / "f_000010").write_bytes(metadata)
+    body = b"image bytes" if body_name else b""
+    if body_name:
+        (tmp_path / body_name).write_bytes(body)
+    addresses = (0x80000010, 0x80000011 if body_name else 0, 0, 0)
+    store = replace(
+        EntryStore.parse(bytes(256)),
+        creation_time=13_400_000_000_000_000,
+        data_size=(len(metadata), len(body), 0, 0),
+        data_addr=addresses,
+    )
+    cache_entry = entry.CacheEntry(
+        addr=CacheAddr(0xA0010002),
+        store=store,
+        key=entry.CacheKey("1/0/https://example.test/image"),
+        stream_addrs=[CacheAddr(value) for value in addresses],
+    )
+    monkeypatch.setattr(entry, "iter_entries", lambda _: iter([cache_entry]))
+
+    (parsed,) = parse_cache_dir(tmp_path)
+
+    assert parsed.body == body
+    assert parsed.cache_timestamps == {
+        "creation_time_us": 13_400_000_000_000_000,
+        "request_time_us": 13_400_000_000_000_003,
+        "response_time_us": 13_400_000_000_000_005,
+    }
+    assert parsed.source_file == (body_name or "data_1")
+    assert parsed.source_offset == (0 if body_name else BLOCK_HEADER_SIZE + 2 * 256)
+    assert (tmp_path / parsed.source_file).is_file()
 
 
 def test_parse_response_info_rejects_bad_length() -> None:
@@ -143,3 +216,19 @@ def test_iter_entries_matches_reference_implementation(cache_fixture_dir: Path) 
             mismatches[k] = (mine_value, ref_value)
 
     assert not mismatches, f"{len(mismatches)}개 엔트리 불일치: {list(mismatches)[:3]}"
+
+
+@pytest.mark.parametrize("fixture_name", ["cache_fixture_dir", "chatgpt_cache_fixture_dir"])
+def test_backend_timestamps_match_reference(request: pytest.FixtureRequest, fixture_name: str):
+    pytest.importorskip("ccl_chromium_reader")
+    cache_dir = request.getfixturevalue(fixture_name)
+    reference = {raw.cache_key: raw for raw in iter_raw_entries(cache_dir)}
+    for raw in _self_backend.iter_raw_entries(cache_dir):
+        ref = reference[raw.cache_key]
+        for name in ("request_time_us", "response_time_us"):
+            actual, expected = getattr(raw, name), getattr(ref, name)
+            if expected is None:
+                assert actual is None
+            else:
+                # 참조 어댑터의 float total_seconds 변환은 최대 수 us를 반올림한다.
+                assert actual is not None and abs(actual - expected) <= 2
