@@ -18,14 +18,14 @@ from pathlib import Path
 
 
 def _add_acquire(sub: argparse._SubParsersAction) -> None:
-    p = sub.add_parser("acquire", help="E01에서 Chrome Cache_Data 추출 (예은)")
+    p = sub.add_parser("acquire", help="E01에서 Chrome 캐시·네트워크 상태 획득")
     p.add_argument("--image", required=True, help="E01 이미지 경로")
     p.add_argument("--out", required=True, help="출력 디렉터리")
     p.set_defaults(func=cmd_acquire)
 
 
 def _add_classify(sub: argparse._SubParsersAction) -> None:
-    p = sub.add_parser("classify", help="Blockfile 파싱 + 서비스 분류 (지민)")
+    p = sub.add_parser("classify", help="캐시 관측 분류·파일 근거 보존")
     p.add_argument(
         "--cache",
         required=True,
@@ -37,7 +37,7 @@ def _add_classify(sub: argparse._SubParsersAction) -> None:
 
 
 def _add_normalize(sub: argparse._SubParsersAction) -> None:
-    p = sub.add_parser("normalize", help="공통 스키마로 정규화·저장 (신아)")
+    p = sub.add_parser("normalize", help="공통 관측 스키마로 정규화·저장")
     p.add_argument("--entries", required=True, help="ClassifiedEntry JSONL 경로")
     p.add_argument("--out", required=True, help="출력 디렉터리")
     p.set_defaults(func=cmd_normalize)
@@ -104,8 +104,8 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     report = run_pipeline(Path(args.image), Path(args.out), progress=_progress)
     print(
-        f"completed {report['profile_count']} profiles, {report['normalized_count']} entries"
-        f" -> {Path(args.out).resolve() / 'run.json'}",
+        f"completed {report['profile_count']} profiles, {report['normalized_count']} cache entries, "
+        f"{report['artifact_count']} artifacts -> {report['review_report']}",
         file=sys.stderr,
     )
     return 0
@@ -118,7 +118,7 @@ def _progress(message: str) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="gentrace",
-        description="GEN-TRACE 포렌식 파이프라인 (획득·분류·정규화)",
+        description="GEN-TRACE: 로컬 증거 획득·분류·정규화·아티팩트 복원",
     )
     sub = parser.add_subparsers(dest="command", required=True)
     _add_acquire(sub)

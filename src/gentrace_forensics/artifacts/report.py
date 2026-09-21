@@ -53,7 +53,17 @@ def _html(
     summary: dict[str, Any],
 ) -> str:
     rows = []
-    for artifact in artifacts:
+    ordered = sorted(
+        artifacts,
+        key=lambda item: (
+            not any(file.recovery_status == "complete" for file in item.files),
+            item.attribution != "evidence_linked",
+            item.role == "unknown",
+            item.service,
+            item.artifact_id,
+        ),
+    )
+    for artifact in ordered:
         previews = []
         file_rows = []
         for file in artifact.files:
