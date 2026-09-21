@@ -17,6 +17,7 @@ import json
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 
+from gentrace_forensics.artifacts.evidence import EvidenceIndex, candidate, service_for
 from gentrace_forensics.classification.blockfile.parser import (
     ParsedCacheEntry,
     parse_cache_dir,
@@ -80,7 +81,7 @@ def _route(
     entries: Sequence[ParsedCacheEntry],
 ) -> tuple[str, Classification]:
     for clf in classifiers:
-        if clf.matches(entry):
+        if service_for(entry.url) == clf.service and clf.matches(entry):
             result = clf.classify(entry, entries=entries)
             return (result.service or clf.service), result
     return "unknown", Classification("other")
@@ -96,10 +97,56 @@ def classify_entries(
     classifiers: list[ServiceClassifier] = [cls() for cls in ALL_CLASSIFIERS]
     profile_body_dir = Path(body_dir) / _cache_id(source_cache) if body_dir is not None else None
     out: list[ClassifiedEntry] = []
+    index = EvidenceIndex(entries)
     for entry in entries:
         entry_id = _entry_id(entry)
         service, result = _route(classifiers, entry, entries)
         evidence = dict(result.evidence)
+        references = index.for_entry(entry)
+        roles = {ref.role for ref in references} - {"unknown"}
+        artifact_role = next(iter(roles)) if len(roles) == 1 else "unknown"
+        matched = candidate(entry)
+        kind = result.artifact_kind
+        if references or matched:
+            if references:
+                service = references[0].service
+            evidence.update(
+                semantic_rule_version="artifact-1",
+                artifact_role=artifact_role,
+                attribution="evidence_linked" if references else "pattern_candidate",
+                representation=matched[2] if matched else "unknown",
+                reference_locations=[
+                    {"cache_key": ref.entry_key, "json_pointer": ref.pointer, "role": ref.role}
+                    for ref in references
+                ],
+            )
+            # Observing cached bytes is not proof that the user performed an action.
+            kind = "other"
+        if entry.cache_key in index.by_entry:
+            kind = "conversation"
+            evidence.update(
+                semantic_rule_version="artifact-1",
+                representation="metadata",
+                attribution="evidence_linked",
+                artifact_role="unknown",
+            )
+        elif result.artifact_kind in {"file_upload", "generated_file"}:
+            kind = "other"
+            evidence.setdefault("attribution", "pattern_candidate")
+            evidence.setdefault("artifact_role", "unknown")
+            evidence.setdefault("semantic_rule_version", "artifact-1")
+        if service == "claude" and evidence.get("role") == "file_preview":
+            scope = evidence.pop("conversation_id", None)
+            if scope is not None:
+                evidence["scope_id"] = scope
+        evidence.setdefault("http_headers", dict(entry.response.headers))
+        if entry.entry_flags & 3:
+            evidence["sparse"] = {
+                "flags": entry.entry_flags,
+                "entry_location": entry.entry_location,
+                "allocation_location": entry.sparse_location,
+            }
+
         evidence.setdefault("entry_hash", f"{entry.entry_hash & 0xFFFFFFFF:08x}")
         evidence.setdefault("http_status", entry.response.status)
         evidence.setdefault("entry_state", entry.entry_state)
@@ -121,7 +168,7 @@ def classify_entries(
                 body_path=body_path,
                 body_sha256=entry.body_sha256,
                 service=service,  # type: ignore[arg-type]
-                artifact_kind=result.artifact_kind,
+                artifact_kind=kind,
                 evidence=evidence,
                 source_file=entry.source_file,
                 source_offset=entry.source_offset,

@@ -53,7 +53,7 @@ def acquire_image(
             finally:
                 del fs
         if not targets:
-            raise ValueError("no Chrome Cache_Data profiles found in NTFS filesystems")
+            raise ValueError("no Chrome cache or network-state profiles found in NTFS filesystems")
 
         out_dir.mkdir(parents=True, exist_ok=False)
         try:

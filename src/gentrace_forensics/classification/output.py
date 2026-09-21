@@ -43,6 +43,8 @@ def classify_manifests(manifests: Sequence[Path], out_dir: Path) -> int:
         stage_jsonl = stage / "classified.jsonl"
         with stage_jsonl.open("x", encoding="utf-8", newline="\n") as output:
             for path, cache in inputs:
+                if not cache.files and (path.parent / "network_acquired.json").is_file():
+                    continue
                 entries = classify_cache(
                     cache, path.parent / "Cache" / "Cache_Data", body_dir=stage_bodies
                 )

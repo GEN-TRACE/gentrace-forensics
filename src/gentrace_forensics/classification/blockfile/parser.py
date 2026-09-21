@@ -41,6 +41,11 @@ class ParsedCacheEntry:
     entry_state: str  # 'normal' | 'evicted' | 'doomed'
     cache_timestamps: dict[str, int | None] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
+    response_location: dict[str, int | str] = field(default_factory=dict)
+    entry_flags: int = 0
+    sparse_data: bytes = b""
+    entry_location: dict[str, int | str] = field(default_factory=dict)
+    sparse_location: dict[str, int | str] = field(default_factory=dict)
 
     @property
     def content_type(self) -> str | None:
@@ -59,6 +64,11 @@ class ParsedCacheEntry:
 def _to_parsed(raw: _self_backend.RawCacheEntry) -> ParsedCacheEntry:
     body, decode_warnings = http.decompress_with_warnings(raw.stored_body, raw.content_encoding)
     return ParsedCacheEntry(
+        response_location=raw.response_location,
+        entry_flags=raw.entry_flags,
+        sparse_data=raw.sparse_data,
+        entry_location=raw.entry_location,
+        sparse_location=raw.sparse_location,
         cache_key=raw.cache_key,
         url=raw.url,
         response=HttpResponseInfo(

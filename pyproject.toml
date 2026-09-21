@@ -18,6 +18,9 @@ dependencies = [
   "tldextract",
   "brotli",
   "zstandard",
+  "Pillow>=11",
+  "imageio-ffmpeg>=0.6",
+  "defusedxml>=0.7",
 ]
 
 [project.optional-dependencies]

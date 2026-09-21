@@ -30,6 +30,7 @@ class ProfileLocation:
     chrome_profile: str  # Default, Profile 2, Guest Profile
     cache_data_path: str  # 이미지 내부 절대 경로
     fs_offset: int
+    has_cache: bool = True
 
 
 def _load_pytsk3() -> Any:
@@ -166,10 +167,10 @@ def open_fs(img: Any, offset: int) -> Any:
 
 
 def find_chrome_profiles(fs: Any, fs_offset: int) -> list[ProfileLocation]:
-    """알려진 경로 패턴으로 Cache_Data 를 가진 프로필만 찾는다.
+    """알려진 경로에서 Cache_Data 또는 네트워크 상태 파일을 가진 프로필을 찾는다.
 
     `/Users/*/AppData/Local/Google/Chrome/User Data/` 아래
-    Default / Profile * / Guest Profile 의 Cache/Cache_Data 존재 확인.
+    Default / Profile * / Guest Profile의 캐시·Network Persistent State 존재 확인.
     """
     if fs_offset < 0:
         raise ValueError("filesystem offset must be non-negative")
@@ -184,7 +185,13 @@ def find_chrome_profiles(fs: Any, fs_offset: int) -> list[ProfileLocation]:
             if not _is_chrome_profile_name(chrome_profile):
                 continue
             cache_data_path = f"{user_data_path}/{chrome_profile}/Cache/Cache_Data"
-            if not _is_directory(fs, cache_data_path):
+            has_cache = _is_directory(fs, cache_data_path)
+            profile_path = f"{user_data_path}/{chrome_profile}"
+            has_network = any(
+                _is_file(fs, f"{profile_path}/{name}")
+                for name in ("Network Persistent State", "Network/Network Persistent State")
+            )
+            if not has_cache and not has_network:
                 continue
             profiles.append(
                 ProfileLocation(
@@ -192,6 +199,7 @@ def find_chrome_profiles(fs: Any, fs_offset: int) -> list[ProfileLocation]:
                     chrome_profile=chrome_profile,
                     cache_data_path=cache_data_path,
                     fs_offset=fs_offset,
+                    has_cache=has_cache,
                 )
             )
 
