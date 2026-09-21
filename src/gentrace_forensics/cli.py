@@ -1,16 +1,17 @@
 """`gentrace` CLI 진입점.
 
-classify는 프로필별 매니페스트를 받아 실행한다. acquire / normalize / run은 연결 예정.
+각 단계는 독립 실행하거나 run으로 연결할 수 있다.
 
     gentrace acquire   --image disk.E01 --out outputs/
     gentrace classify  --cache path/to/profile/acquired.json --out outputs/classified/
-    gentrace normalize --entries outputs/classified.json --out outputs/
+    gentrace normalize --entries outputs/classified/classified.jsonl --out outputs/normalized/
     gentrace run       --image disk.E01 --out outputs/   # 전체 파이프라인
 """
 
 from __future__ import annotations
 
 import argparse
+import sqlite3
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -50,7 +51,13 @@ def _add_run(sub: argparse._SubParsersAction) -> None:
 
 
 def cmd_acquire(args: argparse.Namespace) -> int:
-    raise NotImplementedError("acquisition 단계 미구현 (예은)")
+    from gentrace_forensics.acquisition.pipeline import acquire_image
+
+    manifests = acquire_image(Path(args.image), Path(args.out), progress=_progress)
+    print(f"acquired {len(manifests)} profiles", file=sys.stderr)
+    for path in manifests:
+        print(path)
+    return 0
 
 
 def cmd_classify(args: argparse.Namespace) -> int:
@@ -63,11 +70,27 @@ def cmd_classify(args: argparse.Namespace) -> int:
 
 
 def cmd_normalize(args: argparse.Namespace) -> int:
-    raise NotImplementedError("normalization 단계 미구현 (신아)")
+    from gentrace_forensics.normalization.pipeline import normalize_entries
+
+    count = normalize_entries(Path(args.entries), Path(args.out))
+    print(f"normalized {count} entries -> {Path(args.out).resolve()}", file=sys.stderr)
+    return 0
 
 
 def cmd_run(args: argparse.Namespace) -> int:
-    raise NotImplementedError("run 파이프라인 미구현")
+    from gentrace_forensics.pipeline import run_pipeline
+
+    report = run_pipeline(Path(args.image), Path(args.out), progress=_progress)
+    print(
+        f"completed {report['profile_count']} profiles, {report['normalized_count']} entries"
+        f" -> {Path(args.out).resolve() / 'run.json'}",
+        file=sys.stderr,
+    )
+    return 0
+
+
+def _progress(message: str) -> None:
+    print(message, file=sys.stderr, flush=True)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -86,7 +109,14 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    return args.func(args)
+    try:
+        return args.func(args)
+    except (OSError, ValueError, RuntimeError, sqlite3.Error) as exc:
+        print(f"gentrace: {exc}", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        print("gentrace: interrupted", file=sys.stderr)
+        return 130
 
 
 if __name__ == "__main__":

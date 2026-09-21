@@ -11,6 +11,7 @@ import os
 import sqlite3
 import tempfile
 from collections.abc import Iterable
+from contextlib import closing
 from pathlib import Path
 
 from gentrace_forensics.normalization.time import to_iso8601
@@ -74,7 +75,7 @@ def write_sqlite(records: Iterable[NormalizedArtifact], db_path: Path) -> int:
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
     count = 0
-    with open_db(db_path) as conn:
+    with closing(open_db(db_path)) as conn, conn:
         for record in records:
             conn.execute(_INSERT_SQL, _row(record))
             count += 1

@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import importlib
 import re
+from collections.abc import Callable
 from pathlib import Path
 from types import TracebackType
 from typing import Any, Self
@@ -139,7 +140,7 @@ def open_ewf(first_segment: str | Path) -> Any:
         raise
 
 
-def image_sha256(img: Any) -> str:
+def image_sha256(img: Any, *, progress: Callable[[int, int], None] | None = None) -> str:
     """EWF에서 복원한 논리 디스크 전체 바이트의 SHA-256을 계산한다.
 
     컨테이너 세그먼트 파일 자체가 아니라 ``pytsk3.Img_Info``가 노출하는
@@ -152,6 +153,8 @@ def image_sha256(img: Any) -> str:
 
     digest = hashlib.sha256()
     offset = 0
+    if progress is not None:
+        progress(0, media_size)
     while offset < media_size:
         requested_size = min(_HASH_CHUNK_SIZE, media_size - offset)
         chunk = img.read(offset, requested_size)
@@ -161,4 +164,6 @@ def image_sha256(img: Any) -> str:
             raise OSError(f"EWF image returned {len(chunk)} bytes for a {requested_size}-byte read")
         digest.update(chunk)
         offset += len(chunk)
+        if progress is not None:
+            progress(offset, media_size)
     return digest.hexdigest()
