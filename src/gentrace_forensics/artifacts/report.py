@@ -127,7 +127,7 @@ def _html(
     return (
         """<!doctype html><html lang="ko"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' file: data:; media-src 'self' file:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
 <title>GEN-TRACE · 아티팩트 검토</title>
 <style>
 *{box-sizing:border-box}body{margin:0;background:#f3f5f7;color:#182436;font:15px/1.6 system-ui,sans-serif}
