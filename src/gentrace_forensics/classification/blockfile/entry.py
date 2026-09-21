@@ -203,6 +203,8 @@ class CacheEntry:
     store: EntryStore
     key: CacheKey
     stream_addrs: list[CacheAddr]
+    discovery: str = "index"
+    allocation: str = "not_checked"
 
     def response_info(self, cache_dir: Path) -> HttpResponseInfo:
         """Stream 0 파싱."""
@@ -288,7 +290,7 @@ def read_entry(cache_dir: Path, addr: CacheAddr) -> CacheEntry:
     return CacheEntry(addr=addr, store=store, key=CacheKey(key_text), stream_addrs=stream_addrs)
 
 
-def iter_entries(cache_dir: str | Path) -> Iterator[CacheEntry]:
+def iter_entries(cache_dir: str | Path, *, include_unindexed: bool = True) -> Iterator[CacheEntry]:
     """`index` 해시테이블의 모든 충돌 체인을 따라가며 CacheEntry 를 전부 순회.
 
     `index.iter_entry_addresses()` 는 테이블 슬롯(체인의 head)만 주므로, 여기서
@@ -296,6 +298,8 @@ def iter_entries(cache_dir: str | Path) -> Iterator[CacheEntry]:
     """
     cache_dir = Path(cache_dir)
     visited: set[int] = set()
+    occupied: set[tuple[int, int]] = set()
+    known_keys: set[str] = set()
     for head in index.iter_entry_addresses(cache_dir / "index"):
         addr: CacheAddr | None = head
         while addr is not None and addr.is_initialized:
@@ -303,6 +307,14 @@ def iter_entries(cache_dir: str | Path) -> Iterator[CacheEntry]:
                 raise ValueError("duplicate or cyclic blockfile entry address")
             visited.add(addr.raw)
             entry = read_entry(cache_dir, addr)
+            occupied.update(
+                (addr.block_file_number, addr.block_number + i) for i in range(addr.num_blocks)
+            )
+            known_keys.add(entry.key.raw)
             yield entry
             next_addr = CacheAddr(entry.store.next)
             addr = next_addr if next_addr.is_initialized else None
+    if include_unindexed:
+        from gentrace_forensics.classification.blockfile.recovery import scan_unindexed
+
+        yield from scan_unindexed(cache_dir, occupied, known_keys)

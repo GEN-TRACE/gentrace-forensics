@@ -240,8 +240,13 @@ def _chat_files(entry: ParsedCacheEntry, data: Any, service: str) -> Iterator[Re
         )
         if attachment:
             ids.append(value.get("id") or value.get("uuid"))
+        file_context = attachment or any(
+            key in value for key in ("file_id", "asset_pointer", "file_name", "file_size_bytes")
+        )
         urls = [
-            value[key] for key in ("download_url", "preview_url") if isinstance(value.get(key), str)
+            value[key]
+            for key in ("download_url", "preview_url")
+            if isinstance(value.get(key), str) and (file_context or author is not None)
         ]
         file_ids = [
             item.removeprefix("file-service://") for item in ids if isinstance(item, str) and item

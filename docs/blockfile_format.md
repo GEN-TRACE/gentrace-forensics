@@ -145,3 +145,20 @@ _dk_https://... https://... https://...
 
 명세: Chromium [sparse_control.cc](https://github.com/chromium/chromium/blob/main/net/disk_cache/blockfile/sparse_control.cc),
 [disk_format_base.h](https://github.com/chromium/chromium/blob/main/net/disk_cache/blockfile/disk_format_base.h).
+# 인덱스 밖 엔트리 복원
+
+`index`는 획득 시점의 모든 `data_N` 기록을 포함하지 않을 수 있다. 기본 파서는
+인덱스 체인을 읽은 뒤 256바이트 블록 파일의 EntryStore를 추가로 검사한다.
+헤더의 `self_hash`와 전체 캐시 키의 PersistentHash, 키 길이, 스트림 크기,
+읽을 수 있는 HTTP 응답을 검증한 기록만 포함한다. 인덱스에서 이미 읽은 블록과
+동일 키는 중복 수집하지 않는다. 기존 키의 과거 버전 전수 복원은 지원하지 않는다.
+
+추가 복원 기록에는 `source_refs.locations.entry_store`에 `discovery=block_scan`,
+`allocation=allocated/unallocated`, 체크섬 검증 결과를 보존한다. 할당 비트가
+해제된 블록도 남은 구조체를 검증해 읽지만, 파일 디코딩 성공을 활성 캐시 또는
+사용자 행동의 입증으로 해석하지 않는다. 헤더 체크섬이 없거나 불일치하는 잔존
+기록은 현재 자동 복원 범위에서 제외한다.
+
+명세 근거: Chromium [StorageBlock의 헤더 체크섬](https://github.com/chromium/chromium/blob/main/net/disk_cache/blockfile/storage_block-inl.h),
+[EntryImpl의 키 검증](https://github.com/chromium/chromium/blob/main/net/disk_cache/blockfile/entry_impl.cc),
+[PersistentHash 알고리즘](https://github.com/chromium/chromium/blob/main/base/third_party/superfasthash/superfasthash.c).

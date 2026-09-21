@@ -64,6 +64,13 @@ def iter_raw_entries(cache_dir: str | Path) -> Iterator[RawCacheEntry]:
                 warnings.append(f"sparse index read failed: {exc}")
         path, offset = _entry.data_location(src, cache_entry.addr)
         entry_location: dict[str, int | str] = {"file": path.name, "offset": offset}
+        if cache_entry.discovery == "block_scan":
+            entry_location.update(
+                discovery="block_scan",
+                allocation=cache_entry.allocation,
+                header_checksum="verified",
+                key_checksum="verified",
+            )
         try:
             body = cache_entry.body_bytes(src)
         except (OSError, ValueError) as exc:

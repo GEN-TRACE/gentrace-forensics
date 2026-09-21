@@ -179,7 +179,7 @@ def test_iter_entries_matches_reference_implementation(cache_fixture_dir: Path) 
     pytest.importorskip("ccl_chromium_reader", reason='pip install -e ".[reference]" 필요')
 
     mine = {}
-    for e in entry.iter_entries(cache_fixture_dir):
+    for e in entry.iter_entries(cache_fixture_dir, include_unindexed=False):
         info = e.response_info(cache_fixture_dir)
         body = e.body_bytes(cache_fixture_dir)
         mine[e.key.raw] = (
@@ -224,6 +224,11 @@ def test_backend_timestamps_match_reference(request: pytest.FixtureRequest, fixt
     cache_dir = request.getfixturevalue(fixture_name)
     reference = {raw.cache_key: raw for raw in iter_raw_entries(cache_dir)}
     for raw in _self_backend.iter_raw_entries(cache_dir):
+        if raw.cache_key not in reference:
+            assert raw.entry_location.get("discovery") == "block_scan"
+            assert raw.entry_location.get("header_checksum") == "verified"
+            assert raw.entry_location.get("key_checksum") == "verified"
+            continue
         ref = reference[raw.cache_key]
         for name in ("request_time_us", "response_time_us"):
             actual, expected = getattr(raw, name), getattr(ref, name)

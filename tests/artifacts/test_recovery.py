@@ -194,6 +194,17 @@ def test_chatgpt_roles_follow_messages_not_endpoint_and_errors_are_not_files(cac
     assert result.files[0].representation == "metadata"
 
 
+def test_voice_catalog_preview_is_not_a_user_file(cache, tmp_path):
+    catalog = entry(
+        "https://chatgpt.com/backend-api/voices",
+        json.dumps(
+            {"voices": [{"name": "Example", "preview_url": "https://cdn.example/voice.mp3"}]}
+        ).encode(),
+    )
+    assets, links = build_profile(cache, [catalog], tmp_path)
+    assert assets == [] and links == []
+
+
 def test_host_spoofing_and_claude_scope_are_not_attribution(cache):
     assert service_for("https://evil.example/?url=https://claude.ai/api/x/files/y") == "unknown"
     assert service_for("https://claude.ai.evil.example/api/x/files/y") == "unknown"

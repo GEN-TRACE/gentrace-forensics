@@ -187,6 +187,8 @@ def _recover_body(
         "format_status": fmt.status,
         "coverage_complete": covered,
         "http_status": entry.response.status,
+        "entry_discovery": entry.entry_location.get("discovery", "index"),
+        "entry_allocation": entry.entry_location.get("allocation", "not_checked"),
         **fmt.details,
     }
     if entry.warnings:
@@ -369,6 +371,12 @@ def build_profile(
         if matched_identity is None:
             continue
         artifact = assets.setdefault(matched_identity, _artifact(profile, *matched_identity))
+        if entry.entry_location.get("discovery") == "block_scan":
+            _append_unique(
+                artifact.warnings,
+                "Recovered outside the persisted index; block allocation is recorded in source locations. "
+                "Valid file bytes do not prove the cache entry was active at acquisition.",
+            )
         rep = matched[2] if matched else "unknown"
         claims = representation_claims.get(artifact.artifact_id, set())
         if rep == "unknown" and len(claims) == 1:
