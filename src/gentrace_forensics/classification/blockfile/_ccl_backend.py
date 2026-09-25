@@ -24,7 +24,7 @@ _CHROME_EPOCH = datetime(1601, 1, 1, tzinfo=UTC)
 _BLOCKFILE_MARKERS = ("index", "data_0", "data_1", "data_2", "data_3")
 _EXTERNAL_NAME = re.compile(r"^f_[0-9a-f]{6}$")
 # _dk_ / Range_ 키를 정리한 뒤에도 남는 sparse/range 식별자 접미사 `:deadbeef:0`
-_SPARSE_SUFFIX = re.compile(r":[0-9a-f]{6,}:\d+$")
+_SPARSE_SUFFIX = re.compile(r":[0-9a-fA-F]+:[0-9a-fA-F]+$")
 _STATUS_LINE = re.compile(r"HTTP/\d(?:\.\d)?\s+(\d{3})")
 
 
@@ -47,6 +47,11 @@ class RawCacheEntry:
     request_time_us: int | None = None
     response_time_us: int | None = None
     warnings: list[str] = field(default_factory=list)
+    response_location: dict[str, int | str] = field(default_factory=dict)
+    entry_flags: int = 0
+    sparse_data: bytes = b""
+    entry_location: dict[str, int | str] = field(default_factory=dict)
+    sparse_location: dict[str, int | str] = field(default_factory=dict)
 
 
 def ccl_available() -> bool:
@@ -101,7 +106,7 @@ def _canonical_cache_dir(src: Path) -> Iterator[tuple[Path, dict[str, str]]]:
 def _clean_url(cache_key_cls: type, raw_key: str) -> str:
     key = raw_key.removeprefix("Range_")
     url = cache_key_cls(key).url
-    return _SPARSE_SUFFIX.sub("", str(url))
+    return _SPARSE_SUFFIX.sub("", str(url)) if raw_key.startswith("Range_") else str(url)
 
 
 def _status_from_declarations(declarations: list[str]) -> int | None:

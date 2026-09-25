@@ -94,22 +94,24 @@ def test_classifies_deevid_artifacts(source_cache: AcquiredCache) -> None:
     assert my_assets.evidence["creation_count"] == 1
 
     video = out["https://cdn2.deevid.ai/user-video/v2_traced-aaa.mp4"]
-    assert (video.service, video.artifact_kind) == ("veo3", "generated_file")
+    assert (video.service, video.artifact_kind) == ("veo3", "other")
     assert video.evidence["matched_my_assets"] is True
     assert video.evidence["creation_type"] == "IMAGE2VIDEO"
     assert "forensic training" in video.evidence["prompt_preview"]
 
     upload = out["https://cdn2.deevid.ai/user-image/v2_src-1.png"]
-    assert (upload.service, upload.artifact_kind) == ("veo3", "file_upload")
+    assert (upload.service, upload.artifact_kind) == ("veo3", "other")
     assert upload.evidence["role"] == "video_input_image"
 
     cover = out["https://cdn2.deevid.ai/user-image/v2_rs-image-cover-traced-aaa.png"]
-    assert (cover.service, cover.artifact_kind) == ("veo3", "generated_file")
+    assert (cover.service, cover.artifact_kind) == ("veo3", "other")
     assert cover.evidence["role"] == "result_video_cover"
 
     unknown_img = out["https://cdn2.deevid.ai/user-image/v2_unknown.jpg"]
-    assert (unknown_img.service, unknown_img.artifact_kind) == ("veo3", "file_upload")
+    assert (unknown_img.service, unknown_img.artifact_kind) == ("veo3", "other")
     assert unknown_img.evidence["matched_my_assets"] is False
+    assert unknown_img.evidence["artifact_role"] == "unknown"
+    assert unknown_img.evidence["attribution"] == "pattern_candidate"
 
     site_asset = out["https://deevid.ai/app/_next/static/chunk.js"]
     assert site_asset.service == "unknown"
@@ -131,7 +133,7 @@ def test_veo3_on_local_fixture(cache_fixture_dir: Path) -> None:
     veo3 = [c for c in out if c.service == "veo3"]
     assert len(veo3) >= 10
     kinds = {c.artifact_kind for c in veo3}
-    assert {"generated_file", "file_upload", "conversation"} <= kinds
+    assert {"other", "conversation"} <= kinds
     my_assets = [c for c in veo3 if c.artifact_kind == "conversation"]
     assert len(my_assets) == 1
     assert my_assets[0].evidence["creation_count"] > 0
@@ -139,7 +141,7 @@ def test_veo3_on_local_fixture(cache_fixture_dir: Path) -> None:
     matched_videos = [
         c
         for c in veo3
-        if c.artifact_kind == "generated_file" and c.evidence.get("matched_my_assets")
+        if c.evidence.get("artifact_role") == "generated" and c.evidence.get("matched_my_assets")
     ]
     assert matched_videos
     assert any(c.evidence.get("prompt_preview") for c in matched_videos)

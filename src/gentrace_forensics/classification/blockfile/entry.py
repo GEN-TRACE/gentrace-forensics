@@ -49,7 +49,7 @@ _STATUS_LINE = re.compile(r"HTTP/\d(?:\.\d)?\s+(\d{3})")
 # HTTP Range 요청으로 생긴 sparse 캐시의 자식 엔트리 키 접두어/접미어.
 # `Range_1/0/https://example.com/big.mp4:2fb884ac72675a:0` 형태 — 부모 리소스와
 # 같은 URL 로 취급한다.
-_SPARSE_SUFFIX = re.compile(r":[0-9a-f]{6,}:\d+$")
+_SPARSE_SUFFIX = re.compile(r":[0-9a-fA-F]+:[0-9a-fA-F]+$")
 
 # net/http/http_response_info.cc CachedMetadataFlags / CachedMetadataExtraFlags
 _RESPONSE_INFO_HAS_EXTRA_FLAGS = 1 << 31
@@ -106,7 +106,7 @@ class CacheKey:
             parts = rest[4:].split(" ")
             if len(parts) >= 3:
                 rest = parts[-1]
-        return _SPARSE_SUFFIX.sub("", rest)
+        return _SPARSE_SUFFIX.sub("", rest) if self.raw.startswith("Range_") else rest
 
 
 class _PickleReader:
@@ -203,6 +203,8 @@ class CacheEntry:
     store: EntryStore
     key: CacheKey
     stream_addrs: list[CacheAddr]
+    discovery: str = "index"
+    allocation: str = "not_checked"
 
     def response_info(self, cache_dir: Path) -> HttpResponseInfo:
         """Stream 0 파싱."""
@@ -215,12 +217,18 @@ class CacheEntry:
         """Stream 1 raw 바이트 (압축 해제 전)."""
         return self._read_stream(cache_dir, 1)
 
+    def sparse_bytes(self, cache_dir: Path) -> bytes:
+        """Stream 2 sparse allocation header and bitmap."""
+        return self._read_stream(cache_dir, 2)
+
     def _read_stream(self, cache_dir: Path, stream_number: int) -> bytes:
         addr = self.stream_addrs[stream_number]
         if not addr.is_initialized:
             return b""
         raw = read_block_data(Path(cache_dir), addr)
         size = self.store.data_size[stream_number]
+        if size < 0 or size > len(raw):
+            raise ValueError("stream size exceeds available bytes")
         return raw[:size]
 
 
@@ -282,17 +290,31 @@ def read_entry(cache_dir: Path, addr: CacheAddr) -> CacheEntry:
     return CacheEntry(addr=addr, store=store, key=CacheKey(key_text), stream_addrs=stream_addrs)
 
 
-def iter_entries(cache_dir: str | Path) -> Iterator[CacheEntry]:
+def iter_entries(cache_dir: str | Path, *, include_unindexed: bool = True) -> Iterator[CacheEntry]:
     """`index` 해시테이블의 모든 충돌 체인을 따라가며 CacheEntry 를 전부 순회.
 
     `index.iter_entry_addresses()` 는 테이블 슬롯(체인의 head)만 주므로, 여기서
     각 head 부터 `EntryStore.next` 를 초기화된 주소가 아닐 때까지 따라간다.
     """
     cache_dir = Path(cache_dir)
+    visited: set[int] = set()
+    occupied: set[tuple[int, int]] = set()
+    known_keys: set[str] = set()
     for head in index.iter_entry_addresses(cache_dir / "index"):
         addr: CacheAddr | None = head
         while addr is not None and addr.is_initialized:
+            if addr.raw in visited:
+                raise ValueError("duplicate or cyclic blockfile entry address")
+            visited.add(addr.raw)
             entry = read_entry(cache_dir, addr)
+            occupied.update(
+                (addr.block_file_number, addr.block_number + i) for i in range(addr.num_blocks)
+            )
+            known_keys.add(entry.key.raw)
             yield entry
             next_addr = CacheAddr(entry.store.next)
             addr = next_addr if next_addr.is_initialized else None
+    if include_unindexed:
+        from gentrace_forensics.classification.blockfile.recovery import scan_unindexed
+
+        yield from scan_unindexed(cache_dir, occupied, known_keys)

@@ -7,6 +7,7 @@ index, data_*, f_* 전부를 원래 디렉터리 구조 그대로 추출하고
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import shutil
 from datetime import UTC, datetime, timedelta
@@ -101,7 +102,7 @@ def extract_cache(
 
     profile_root.mkdir(parents=True)
     try:
-        names = _cache_file_names(fs, profile.cache_data_path)
+        names = _cache_file_names(fs, profile.cache_data_path) if profile.has_cache else []
         files = [
             extract_file(fs, f"{profile.cache_data_path}/{name}", cache_root / name)
             for name in names
@@ -116,6 +117,7 @@ def extract_cache(
             chrome_version=chrome_version,
             files=files,
         )
+        extract_network_state(fs, profile, profile_root)
         output_manifest = profile_root / _MANIFEST_NAME
         with output_manifest.open("x", encoding="utf-8", newline="\n") as manifest:
             manifest.write(acquired.model_dump_json(indent=2))
@@ -231,3 +233,29 @@ def _timestamp(meta: Any, field: str) -> datetime | None:
         )
     except (OSError, OverflowError, ValueError):
         return None
+
+
+def extract_network_state(fs: Any, profile: ProfileLocation, profile_root: Path) -> None:
+    """Save optional network state separately without changing AcquiredCache.files."""
+    from gentrace_forensics.acquisition.filesystem import _directory_names
+
+    source_root = profile.cache_data_path.removesuffix("/Cache/Cache_Data")
+    files: list[dict[str, Any]] = []
+    for relative in ("Network Persistent State", "Network/Network Persistent State"):
+        directory, _, name = relative.rpartition("/")
+        parent = source_root + ("/" + directory if directory else "")
+        if name not in _directory_names(fs, parent):
+            continue
+        file = extract_file(fs, source_root + "/" + relative, profile_root / relative)
+        file.relative_path = relative
+        files.append(
+            {"source_path": source_root + "/" + relative, "file": file.model_dump(mode="json")}
+        )
+    report = {
+        "schema_version": "1.0",
+        "status": "collected" if files else "not_found",
+        "files": files,
+    }
+    with (profile_root / "network_acquired.json").open("x", encoding="utf-8") as output:
+        json.dump(report, output, ensure_ascii=False, indent=2)
+        output.write("\n")

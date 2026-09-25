@@ -43,8 +43,34 @@ def iter_raw_entries(cache_dir: str | Path) -> Iterator[RawCacheEntry]:
         raise ValueError(f"blockfile 캐시가 아님 (index/data_0..3 없음): {src}")
 
     for cache_entry in _entry.iter_entries(src):
-        info = cache_entry.response_info(src)
         warnings: list[str] = []
+        try:
+            info = cache_entry.response_info(src)
+        except (OSError, ValueError) as exc:
+            info = _entry.HttpResponseInfo(None)
+            warnings.append(f"response read failed: {exc}")
+        response_location: dict[str, int | str] = {}
+        if cache_entry.stream_addrs[0].is_initialized:
+            path, offset = _entry.data_location(src, cache_entry.stream_addrs[0])
+            response_location = {"file": path.name, "offset": offset}
+        sparse = b""
+        sparse_location: dict[str, int | str] = {}
+        if cache_entry.store.flags & 3:
+            try:
+                sparse = cache_entry.sparse_bytes(src)
+                path, offset = _entry.data_location(src, cache_entry.stream_addrs[2])
+                sparse_location = {"file": path.name, "offset": offset}
+            except (OSError, ValueError) as exc:
+                warnings.append(f"sparse index read failed: {exc}")
+        path, offset = _entry.data_location(src, cache_entry.addr)
+        entry_location: dict[str, int | str] = {"file": path.name, "offset": offset}
+        if cache_entry.discovery == "block_scan":
+            entry_location.update(
+                discovery="block_scan",
+                allocation=cache_entry.allocation,
+                header_checksum="verified",
+                key_checksum="verified",
+            )
         try:
             body = cache_entry.body_bytes(src)
         except (OSError, ValueError) as exc:
@@ -55,6 +81,11 @@ def iter_raw_entries(cache_dir: str | Path) -> Iterator[RawCacheEntry]:
         creation_time_us = cache_entry.store.creation_time or None
 
         yield RawCacheEntry(
+            response_location=response_location,
+            entry_flags=cache_entry.store.flags,
+            sparse_data=sparse,
+            entry_location=entry_location,
+            sparse_location=sparse_location,
             cache_key=cache_entry.key.raw,
             url=cache_entry.key.url,
             http_status=info.status,

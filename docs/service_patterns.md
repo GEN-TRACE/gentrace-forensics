@@ -1,67 +1,45 @@
-# 서비스별 분류 패턴 (CONTRIBUTING.md 3.2.2)
+# 서비스별 아티팩트 근거 (`artifact-1`)
 
-분류 로직: URL/Content-Type 패턴과 JSON 필드, Gemini의 관측된 파일명·변형 관계를 사용한다.
-아래에서 실제 픽스처 관측과 명세 기반 미검증 항목을 구분한다.
+파일 자산과 캐시 관측을 구분한다. 공개 분류 단계는 `artifacts/evidence.py`의 구조화된 참조를 사용하며, 기존 서비스 분류기의 URL 휴리스틱은 보조 근거다. 정규화·복원·출력 계약은 [artifact_outputs.md](artifact_outputs.md)를 따른다.
 
-## ChatGPT
+| 서비스 | 자산 연결 | 역할 판단 | 별도로 표시하는 항목 |
+|---|---|---|---|
+| ChatGPT | 메시지 첨부 `id`/`file_id`, `asset_pointer`, 해당 객체의 `download_url` | user/human 메시지 첨부는 입력 관련, assistant 메시지 파일은 생성 관련 | 문맥 없는 전달 URL, 다운로드 메타데이터, 접근 거부 JSON |
+| Claude | 메시지의 파일 참조와 파일 ID | 메시지 문맥으로 판단. 전달 경로만 있으면 미확정 | preview, 출력 경로 후보, 실제 형식 미검증 문서 |
+| Gemini | `watermarked_img_<id>`를 가진 변형 | 파일 이름·경로만으로 역할을 확정하지 않음 | ID 없는 후보, 같은 ID의 PNG/JPEG 변형 |
+| DeeVid/Veo | `my-assets`의 각 `creation`과 자산 키 | 입력 이름·URL은 입력 관련, video URL은 생성 관련 | 커버, 변환 이미지, 이력 미연결 URL, sparse 조각 |
+| ElevenLabs | voice/sample/history ID, 명시적 preview URL | 클론 유형의 샘플은 입력 관련, history 파일은 생성 관련 | 기본 보이스 샘플, 미리듣기, JSON만 남은 파일 정보 |
 
-| | File Upload | Generated File |
-| --- | --- | --- |
-| Content-Type | `image/png` | 대화 캐시 JSON 내부 필드로 판별 |
-| URL | `chatgpt.com/backend-api/estuary/content?id=file_...` | 대화 캐시 JSON(`conversation_id`), `download_url` 필드 |
-| 식별자 | URL의 `file_id` | – |
-| 비고 | – | 비로그인 상태에서도 `file_name`, `file_size_bytes` 는 평문 잔존. 본문은 "File stream access denied" |
+`evidence_linked`는 파일별 JSON 근거에 연결됐다는 뜻이다. `pattern_candidate`는 경로·이름만 맞는 후보이며 `role=unknown`이다. 서비스 문자열이 다른 호스트의 경로나 query에 포함된 것만으로 서비스에 귀속하지 않는다.
 
-현재 픽스처는 대화 목록만 포함한다. 위 업로드·생성 파일 규칙은 합성 테스트로 검증했으며
-실제 트래픽 검증은 남아 있다. 생성 파일 근거를 담은 대화 JSON의 분류는 실제 파일
-본문을 확보했다는 뜻이 아니다.
+## DeeVid
 
-## Claude
+`detail.creation`의 `originalImageNameUrls`, `inputUserImageName`, `videoUrl`, `noWaterMarkVideoUrl`, `resultVideoCoverImageName`을 각각 추출한다. JSON key는 대소문자를 구분한다. 각 필드의 pointer와 작업 ID·종류·상태·프롬프트·시간값을 유지하며, 한 입력이 여러 작업에 사용돼도 첫 작업만 남기지 않는다.
 
-| | File Upload | Generated File |
-| --- | --- | --- |
-| Content-Type | `image/webp` | `application/octet-stream` |
-| URL | `claude.ai/api/[conversation_id]/files/[file_id]` | 인코딩된 URL 경로 디코딩 필요 |
-| 파일명 | `preview.webp` | 디코딩 시 `/mnt/user-data/outputs/<파일명>` 형태 |
-
-현재 픽스처에는 해당 Claude 트래픽이 없어 합성 테스트만 있다.
-
-## Gemini (Nano Banana 2)
-
-| 항목 | 값 |
-| --- | --- |
-| 도메인 | `lh3.googleusercontent.com` |
-| 생성본 근거 | 파일명 또는 Content-Disposition의 `watermarked_img_<id>` |
-| 관측된 변형 | `rd-gg`: 전체 해상도 PNG / `rd-gg-dl`: 다운로드 JPG |
-| 연결 | 같은 `<id>`의 변형을 연결하고 `paired`, `group_variants`에 기록 |
-| 판별 근거 없음 | `watermarked_img_<id>`가 없는 후보는 `unmatched` |
-
-현재 픽스처에서는 두 변형 모두 생성본으로 관측됐으며 사용자 업로드는 확인되지 않았다.
-초안의 `rd-gg`=업로드, `rd-gg-dl`=생성본 및 크기 비교 규칙은 적용하지 않는다.
-ID가 있으면 짝이 없어도 생성본으로 분류하고 `paired=false`를 기록한다.
-
-## Google Veo 3 (deevid.ai)
-
-| | File Upload | Generated File |
-| --- | --- | --- |
-| Content-Type | `application/json` | 같은 JSON 내부 필드 |
-| URL | `api.deevid.ai/my-assets` | 동일 캐시 항목 |
-| JSON 필드 | `originalImageNameUrls`, `inputUserImageName` | `videoUrl`, `noWaterMarkVideoUrl` |
-| CDN | `cdn2.deevid.ai/user-image/...` | `cdn2.deevid.ai/user-video/...mp4` |
-
-`my-assets` JSON 자체는 `conversation`으로 분류한다. JSON에서 뽑은 자산 키와 CDN
-항목을 연결하며 결과 커버(`v2_rs-image-cover-*`)도 생성본으로 분류한다.
+`/cdn-cgi/image/` 변형은 원본 자산과 연결되더라도 `preview`다. `v2_rs-image-cover-*`는 `cover`이며 동영상 파일이 아니다. Range 자식 엔트리는 독립 생성물로 집계하지 않고 부모·signature·할당 bitmap으로 복원한다.
 
 ## ElevenLabs
 
-| | File Upload | Generated File |
-| --- | --- | --- |
-| Content-Type | JSON 메타데이터 또는 오디오 | 오디오 |
-| URL | `v2/voices`, `v1/voices/[voice_id]`, `v1/voices/[voice_id]/samples/[sample_id][/audio]` | `v1/history/[history_item_id]/audio` |
-| JSON 필드 | `voices[].samples[]` 또는 `samples[]` → `file_name`, `size_bytes`, `hash` 등 | 이력 JSON은 `conversation`으로 분류하고 `generations[]`에 보존 |
-| 파일명 예 | `forensicuser.m4a` → 서버 저장명 `forensicuser.mp3` | – |
+샘플의 이름, 서버 크기·해시, voice ID·유형을 JSON 출처와 함께 보존한다. `category=cloned/professional` 문맥이 없는 `/samples/` 응답은 업로드 확정이 아니다. preview와 history 오디오를 구분하고, 음성 metadata 응답 자체를 복원된 오디오로 내보내지 않는다. 실제 음성 본문이 없으면 `metadata_only`다.
 
-`samples` 오디오는 클론 원본이므로 업로드로 분류한다. 현재 픽스처에는 JSON
-메타데이터만 있고 오디오 바이트는 없다. JSON 메타데이터를 `file_upload`로
-분류하더라도 `filename`·`size`·본문 해시는 그 캐시 응답의 값이며,
-개별 오디오 파일의 정보는 `evidence.samples[]`에서 확인한다.
+## ChatGPT · Claude
+
+재귀 탐색 중 파일 이름과 URL을 서로 다른 객체에서 모아 순서대로 짝짓지 않는다. 메시지 작성자 문맥과 같은 파일 객체의 필드를 함께 사용한다. `estuary/content` endpoint는 역할 판정 근거가 아니다. HTTP 오류 JSON은 실제 파일로 간주하지 않는다.
+
+Claude `/api/<scope>/files/<id>`의 scope를 자동으로 conversation/session ID에 대입하지 않는다. `preview.webp`는 원본과 구분하며, URL의 `.doc`/`.docx`보다 ZIP/OOXML/OLE 구조 검사를 우선한다.
+
+## Gemini
+
+과거 픽스처에서는 `rd-gg` PNG와 `rd-gg-dl` JPEG가 생성본 변형으로 관측됐다. PDF에는 다른 해석의 사례가 있으므로 경로·파일 크기를 일반적인 업로드/생성 규칙으로 사용하지 않는다. 현재 자동 결과는 공통 ID의 표현들을 묶되, 역할은 미확정 후보로 남긴다.
+
+## 캐시 정규화와 아티팩트 정규화
+
+- `normalized/`는 기존 스키마의 관측 목록이다. 파일 응답은 `cache_write`, 구조화된 파일 메타데이터는 `response`로 기록하며 actor를 임의로 만들지 않는다.
+- `artifacts.jsonl`은 파일 자산별 역할·근거·복원 상태와 여러 파일 표현을 담는다. 같은 캐시 레코드 수가 곧 파일 수는 아니다.
+- `artifacts.sqlite3`의 `relationships`는 작업·메시지·보이스 이력과 파일 자산을 연결한다.
+
+## 검증 구분
+
+합성 사례는 메시지/작업 연결, 기본·클론 보이스 구분, 미리보기, 오류 응답, 형식 위장, sparse 누락·충돌을 검증한다. 실제 확보 자료에 없는 PDF 사례는 미검증으로 남긴다. URL을 현재 서버에서 재생해 본 PDF 화면은 해당 바이트가 원래 E01에 모두 존재한다는 증거가 아니다.
+
+실자료 검증 결과와 환경 제한은 [artifact_validation.md](artifact_validation.md)에 별도 기록한다. 전체 정답 집합이 없으므로 정확도 점수는 산출하지 않는다.

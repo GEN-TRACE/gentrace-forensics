@@ -39,7 +39,7 @@ def test_pairs_fullres_and_download(source_cache: AcquiredCache) -> None:
     ]
     out = list(classify_entries(entries, source_cache=source_cache))  # type: ignore[arg-type]
     assert all(c.service == "gemini" for c in out)
-    assert all(c.artifact_kind == "generated_file" for c in out)
+    assert all(c.artifact_kind == "other" for c in out)
 
     by_id = {(c.evidence["artifact_id"], c.evidence["variant"]): c for c in out}
     assert by_id[("111", "fullres")].evidence["paired"] is True
@@ -54,7 +54,7 @@ def test_rd_gg_image_without_id_is_unmatched(source_cache: AcquiredCache) -> Non
     )
     (c,) = classify_entries([entry], source_cache=source_cache)  # type: ignore[arg-type]
     assert c.service == "gemini"
-    assert c.artifact_kind == "unmatched"
+    assert c.artifact_kind == "other"
     assert "watermarked_img id 없음" in c.evidence["reason"]
 
 
@@ -83,7 +83,10 @@ def test_gemini_on_local_fixture(cache_fixture_dir: Path) -> None:
     out = classify_cache_dir(cache_fixture_dir)
     gem = [c for c in out if c.service == "gemini"]
     assert len(gem) >= 5
-    assert {c.artifact_kind for c in gem} == {"generated_file"}
+    assert {c.artifact_kind for c in gem} == {"other", "conversation"}
+    pointers = [c for c in gem if c.artifact_kind == "conversation"]
+    assert all(c.evidence["representation"] == "metadata" for c in pointers)
+    gem = [c for c in gem if c.artifact_kind == "other"]
     ids = {c.evidence["artifact_id"] for c in gem}
     assert len(ids) >= 3
     assert any(c.evidence["paired"] for c in gem)

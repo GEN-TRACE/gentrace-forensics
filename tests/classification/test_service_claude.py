@@ -25,19 +25,19 @@ def source_cache() -> AcquiredCache:
     return _local_acquired_cache(Path("/tmp/no-claude-fixture"))
 
 
-def test_file_preview_is_upload(source_cache: AcquiredCache) -> None:
+def test_file_preview_is_candidate(source_cache: AcquiredCache) -> None:
     entry = make_entry(
         "https://claude.ai/api/conv-123/files/file-456",
         body=b"webp-bytes",
         content_type="image/webp",
     )
     (c,) = classify_entries([entry], source_cache=source_cache)
-    assert (c.service, c.artifact_kind) == ("claude", "file_upload")
-    assert c.evidence["conversation_id"] == "conv-123"
+    assert (c.service, c.artifact_kind) == ("claude", "other")
+    assert c.evidence["scope_id"] == "conv-123"
     assert c.evidence["file_id"] == "file-456"
 
 
-def test_generated_output_path_is_generated_file(source_cache: AcquiredCache) -> None:
+def test_generated_output_path_is_candidate(source_cache: AcquiredCache) -> None:
     encoded_path = quote("/mnt/user-data/outputs/report.pdf", safe="")
     entry = make_entry(
         f"https://claude.ai/api/conv-123/download?path={encoded_path}",
@@ -45,7 +45,7 @@ def test_generated_output_path_is_generated_file(source_cache: AcquiredCache) ->
         content_type="application/octet-stream",
     )
     (c,) = classify_entries([entry], source_cache=source_cache)
-    assert (c.service, c.artifact_kind) == ("claude", "generated_file")
+    assert (c.service, c.artifact_kind) == ("claude", "other")
     assert c.filename == "report.pdf"
     assert "/mnt/user-data/outputs/report.pdf" in c.evidence["decoded_url"]
 

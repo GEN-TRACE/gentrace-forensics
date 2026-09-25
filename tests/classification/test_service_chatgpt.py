@@ -89,14 +89,14 @@ def test_conversations_list_is_conversation(source_cache: AcquiredCache) -> None
     assert c.evidence["conversations"][0]["title"] == "Generate WiFi Poster PNG"
 
 
-def test_conversation_detail_with_download_url_is_generated(source_cache: AcquiredCache) -> None:
+def test_conversation_detail_with_download_url_is_metadata(source_cache: AcquiredCache) -> None:
     entry = make_entry(
         "https://chatgpt.com/backend-api/conversation/conv-1",
         body=_CONVERSATION_DETAIL_WITH_FILE_BODY,
         content_type="application/json",
     )
     (c,) = classify_entries([entry], source_cache=source_cache)
-    assert (c.service, c.artifact_kind) == ("chatgpt", "generated_file")
+    assert (c.service, c.artifact_kind) == ("chatgpt", "conversation")
     assert c.evidence["conversation_id"] == "conv-1"
     assert c.evidence["download_urls"] == ["https://files.oaiusercontent.com/abc?sig=1"]
     assert c.evidence["file_names"] == ["wifi_poster.png"]
@@ -116,14 +116,14 @@ def test_conversation_detail_without_download_url_is_conversation(
     assert c.evidence["role"] == "conversation_detail"
 
 
-def test_estuary_content_is_upload_even_when_access_denied(source_cache: AcquiredCache) -> None:
+def test_estuary_content_is_candidate_when_access_denied(source_cache: AcquiredCache) -> None:
     entry = make_entry(
         "https://chatgpt.com/backend-api/estuary/content?id=file-abc123",
         body=b"File stream access denied",  # 실제 관측된 응답 본문 형태
         content_type="text/plain",
     )
     (c,) = classify_entries([entry], source_cache=source_cache)
-    assert (c.service, c.artifact_kind) == ("chatgpt", "file_upload")
+    assert (c.service, c.artifact_kind) == ("chatgpt", "other")
     assert c.evidence["file_id"] == "file-abc123"
     assert c.evidence["access_denied"] is True
 

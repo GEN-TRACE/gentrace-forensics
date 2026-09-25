@@ -10,7 +10,6 @@
 from __future__ import annotations
 
 import json
-import re
 from datetime import UTC, datetime
 from pathlib import PurePath
 from typing import Any
@@ -24,8 +23,6 @@ from gentrace_forensics.normalization.time import from_unix, from_webkit
 from gentrace_forensics.normalization.url import domain_of
 from gentrace_forensics.schemas.classification import ClassifiedEntry
 from gentrace_forensics.schemas.normalization import NormalizedArtifact
-
-_CLAUDE_CONVERSATION = re.compile(r"^/api/([^/]+)/files(?:/|$)")
 
 
 def _scalar_text(value: Any) -> str | None:
@@ -128,18 +125,12 @@ def _ids(entry: ClassifiedEntry, service: str) -> tuple[str | None, str | None]:
         ("session_id", "sessionId", "conversation_id", "conversationId", "chat_id", "chatId"),
     )
 
-    # Claude upload URL은 계약상 /api/[conversation_id]/files/[file_id] 구조다.
-    if session_id is None and service == "claude":
-        from gentrace_forensics.normalization.url import decode_path
-
-        match = _CLAUDE_CONVERSATION.match(decode_path(entry.url))
-        if match:
-            session_id = match.group(1)
-
     return user_id, session_id
 
 
 def _actor(entry: ClassifiedEntry) -> str | None:
+    if entry.evidence.get("semantic_rule_version") == "artifact-1":
+        return None
     explicit = _first_evidence_value(entry.evidence, ("actor",))
     if explicit is not None:
         return explicit

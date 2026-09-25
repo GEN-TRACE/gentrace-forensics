@@ -101,7 +101,7 @@ def test_missing_acquired_file_hash_is_not_invented(classified_entry: Classified
     assert json.loads(transform(classified_entry).source_id)["source_file_sha256"] is None
 
 
-def test_claude_url_supplies_session_only_when_evidence_has_none(classified_entry: ClassifiedEntry):
+def test_claude_scope_is_not_a_session_without_explicit_evidence(classified_entry: ClassifiedEntry):
     entry = classified_entry.model_copy(
         update={
             "service": "claude",
@@ -109,6 +109,6 @@ def test_claude_url_supplies_session_only_when_evidence_has_none(classified_entr
             "evidence": {},
         }
     )
-    assert transform(entry).session_id == "chat-2"
+    assert transform(entry).session_id is None
     entry.evidence = {"conversation_id": "explicit-chat"}
     assert transform(entry).session_id == "explicit-chat"
