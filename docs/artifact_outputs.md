@@ -1,6 +1,6 @@
 # 아티팩트 분석과 결과 해석
 
-`gentrace run`은 E01 획득, 원본 해시 검증, 캐시 분류·정규화, 파일 자산 추출·복원, 오프라인 보고서 생성을 연결한다. `gentrace analyze`는 이미 획득한 `acquired.json`을 받아 이미지 전체 해시를 다시 계산하지 않고 같은 분석을 수행한다. 원본 캐시 파일의 크기·SHA-256과 추가 네트워크 파일의 해시는 매번 확인한다.
+`gentrace run`은 E01 획득, 원본 해시 검증, 캐시 분류·정규화, 파일 자산 추출·복원과 결과 저장을 연결한다. `gentrace analyze`는 이미 획득한 `acquired.json`을 받아 이미지 전체 해시를 다시 계산하지 않고 같은 분석을 수행한다. 원본 캐시 파일의 크기·SHA-256과 추가 네트워크 파일의 해시는 매번 확인한다.
 
 ```bash
 gentrace run --image evidence.E01 --out outputs/case-new
@@ -8,7 +8,7 @@ gentrace analyze --cache /path/to/Default/acquired.json --out outputs/review-new
 # 여러 프로필은 --cache를 반복한다.
 ```
 
-출력은 새 폴더에만 생성한다. 실패하면 `run.json`의 `stage`, `error`를 확인한다. 완료된 앞 단계는 남기며, 실패한 결과 폴더를 재사용하지 않는다. 보고서 경로는 `<out>/report/index.html`이다. 폴더 전체를 함께 옮겨야 파일 링크가 유지된다.
+출력은 새 폴더에만 생성한다. 실패하면 `run.json`의 `stage`, `error`를 확인한다. 완료된 앞 단계는 남기며, 실패한 결과 폴더를 재사용하지 않는다. 파일별 근거와 복원 경로는 `artifacts.jsonl` 또는 `artifacts.sqlite3`에서 확인한다. 폴더 전체를 함께 옮겨야 복원 파일의 상대 경로가 유지된다.
 
 ## 결과 파일
 
@@ -22,11 +22,8 @@ gentrace analyze --cache /path/to/Default/acquired.json --out outputs/review-new
 | `partial/<service>/<artifact_id>/<sha256>.bin` | 부분·조각 데이터. 논리 오프셋은 해당 파일의 `ranges`에 기록 |
 | `network_records.jsonl` | 프로필의 네트워크 상태. 사용자 활동 이벤트와 구분 |
 | `validation_summary.json` | 캐시·자산·표현 개수, 복원 상태, 네트워크 획득 상태, 검증 범위 |
-| `report/index.html` | 로컬 파일 열람, 서비스·역할·근거·복원 필터, 원본 위치·관계 확인 |
 
-보고서는 검증된 로컬 표현이 있는 자산을 먼저 표시하고, 그중 근거가 연결된 항목을 우선한다.
-
-보고서는 원격 URL에 접속하지 않는다. URL은 근거 텍스트로만 표시한다. 캐시 원본은 수정하지 않으며 실제 자료·결과·서명 URL을 저장소에 커밋하지 않는다.
+분석 중 원격 URL에 접속하지 않는다. URL은 근거 데이터로만 저장한다. 캐시 원본은 수정하지 않으며 실제 자료·결과·서명 URL을 저장소에 커밋하지 않는다.
 
 ## 아티팩트 계약 v1
 
@@ -83,6 +80,6 @@ Sparse 영상은 정확한 부모 캐시 키와 세대 signature, 부모·자식
 
 ## 검증 범위
 
-합성 회귀 테스트는 역할 연결, 여러 파일·작업, 미리보기, HTTP 오류, 긴 이름, 위장 확장자, sparse 누락·충돌·세대 불일치, 실제 이미지·영상 디코드, 네트워크 시각 의미, HTML 이스케이프, 원본 변조, 기존 결과 보호를 검증한다.
+합성 회귀 테스트는 역할 연결, 여러 파일·작업, 미리보기, HTTP 오류, 긴 이름, 위장 확장자, sparse 누락·충돌·세대 불일치, 실제 이미지·영상 디코드, 네트워크 시각 의미, JSONL·SQLite 근거 보존, 원본 변조, 기존 결과 보호를 검증한다.
 
-`tests/test_e01_integration.py`는 원본 획득부터 보고서까지 네이티브 실행하고 캐시/본문/복원 파일 해시와 JSONL·SQLite 개수를 확인한다. scenario1의 로컬 Cache_Data 재분석은 scenario1 E01 전체 실행 검증과 다르다. 서비스별 전체 정답 집합이 없으므로 분류 정확도 점수는 `not_scored`다. ChromeCacheView/Hindsight와 외부 도구 전수 대조도 별도 검증 과제다.
+`tests/test_e01_integration.py`는 원본 획득부터 결과 저장까지 네이티브 실행하고 캐시/본문/복원 파일 해시와 JSONL·SQLite 개수를 확인한다. scenario1의 로컬 Cache_Data 재분석은 scenario1 E01 전체 실행 검증과 다르다. 서비스별 전체 정답 집합이 없으므로 분류 정확도 점수는 `not_scored`다. ChromeCacheView/Hindsight와 외부 도구 전수 대조도 별도 검증 과제다.

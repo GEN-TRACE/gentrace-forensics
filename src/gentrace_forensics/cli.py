@@ -44,7 +44,7 @@ def _add_normalize(sub: argparse._SubParsersAction) -> None:
 
 
 def _add_analyze(sub: argparse._SubParsersAction) -> None:
-    p = sub.add_parser("analyze", help="기존 획득본 검증 → 분류·정규화·아티팩트 복원·열람 보고서")
+    p = sub.add_parser("analyze", help="기존 획득본 검증 → 분류·정규화·아티팩트 복원")
     p.add_argument(
         "--cache", required=True, action="append", help="acquired.json 경로 (반복 지정 가능)"
     )
@@ -59,14 +59,14 @@ def cmd_analyze(args: argparse.Namespace) -> int:
         [Path(path) for path in args.cache], Path(args.out), progress=_progress
     )
     print(
-        f"recovered {report['artifact_count']} artifacts -> {report['review_report']}",
+        f"recovered {report['artifact_count']} artifacts -> {report['artifact_jsonl']}",
         file=sys.stderr,
     )
     return 0
 
 
 def _add_run(sub: argparse._SubParsersAction) -> None:
-    p = sub.add_parser("run", help="획득 → 분류·정규화 → 아티팩트 복원·열람 보고서")
+    p = sub.add_parser("run", help="획득 → 분류·정규화 → 아티팩트 복원")
     p.add_argument("--image", required=True, help="E01 이미지 경로")
     p.add_argument("--out", required=True, help="출력 디렉터리")
     p.set_defaults(func=cmd_run)
@@ -105,7 +105,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     report = run_pipeline(Path(args.image), Path(args.out), progress=_progress)
     print(
         f"completed {report['profile_count']} profiles, {report['normalized_count']} cache entries, "
-        f"{report['artifact_count']} artifacts -> {report['review_report']}",
+        f"{report['artifact_count']} artifacts -> {report['artifact_jsonl']}",
         file=sys.stderr,
     )
     return 0

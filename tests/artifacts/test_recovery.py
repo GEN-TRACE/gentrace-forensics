@@ -17,8 +17,8 @@ from PIL import Image
 from gentrace_forensics.artifacts.evidence import service_for
 from gentrace_forensics.artifacts.formats import inspect_bytes
 from gentrace_forensics.artifacts.pipeline import build_profile, verify_manifests
-from gentrace_forensics.artifacts.report import write_outputs
 from gentrace_forensics.artifacts.sparse import MAGIC, Span, assemble, recover_sparse
+from gentrace_forensics.artifacts.store import write_outputs
 from gentrace_forensics.classification.blockfile.entry import CacheKey, HttpResponseInfo
 from gentrace_forensics.classification.blockfile.parser import ParsedCacheEntry
 from gentrace_forensics.classification.classify import classify_entries
@@ -332,16 +332,24 @@ def test_integrity_verification_rejects_modified_sources(cache, tmp_path):
         verify_manifests([manifest])
 
 
-def test_report_escapes_evidence_and_sqlite_retains_relationships(cache, tmp_path):
+def test_store_preserves_evidence_and_relationships_without_html(cache, tmp_path):
     meta = deevid_metadata([{"id": 1, "inputUserImageName": '<script>alert("x")</script>.jpg'}])
     assets, links = build_profile(cache, [meta], tmp_path)
     summary = {"cache_entry_count": 1, "validated_media_files": 0, "network": []}
     write_outputs(tmp_path, assets, links, [], summary)
-    report = (tmp_path / "report" / "index.html").read_text()
-    assert '<script>alert("x")</script>' not in report and "&lt;script&gt;" in report
+    records = [json.loads(line) for line in (tmp_path / "artifacts.jsonl").read_text().splitlines()]
+    assert records == [asset.model_dump(mode="json") for asset in assets]
+    assert not (tmp_path / "report").exists()
+    assert not list(tmp_path.rglob("*.html"))
+    saved_summary = json.loads((tmp_path / "validation_summary.json").read_text())
+    assert saved_summary["sqlite_artifact_count"] == len(assets)
     with closing(sqlite3.connect(tmp_path / "artifacts.sqlite3")) as db:
         assert db.execute("SELECT count(*) FROM relationships").fetchone()[0] == 1
         assert db.execute("SELECT role FROM artifacts").fetchone()[0] == "upload"
+        assert (
+            json.loads(db.execute("SELECT record_json FROM artifacts").fetchone()[0]) == records[0]
+        )
+        assert db.execute("PRAGMA foreign_key_check").fetchall() == []
     with pytest.raises(FileExistsError):
         write_outputs(tmp_path, assets, links, [], summary)
 

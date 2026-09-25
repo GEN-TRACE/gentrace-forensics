@@ -1,1 +1,1 @@
-"""Evidence-linked artifact extraction, local recovery and review reports."""
+"""Evidence-linked artifact extraction, local recovery and structured storage."""

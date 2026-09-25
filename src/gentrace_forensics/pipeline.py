@@ -71,13 +71,12 @@ def run_pipeline(
             raise ValueError("classification and normalization record counts differ")
         report["stage"] = "artifacts"
         write_report(report_path, report)
-        emit("[4/4] recover artifacts and build offline report")
+        emit("[4/4] recover artifacts")
         summary = recover_artifacts(manifests, out_dir)
         report.update(
             artifact_count=summary["artifact_count"],
             artifact_jsonl=str(out_dir / "artifacts.jsonl"),
             artifact_sqlite=str(out_dir / "artifacts.sqlite3"),
-            review_report=str(out_dir / "report" / "index.html"),
         )
         report.update(
             status="complete",

@@ -175,7 +175,13 @@ def test_run_connects_all_stages_with_real_blockfile_parser(tmp_path, native_bou
     assert image.read_offsets.count(0) == 1  # 전체 디스크 해시는 프로필마다 반복하지 않는다.
     acquisition = json.loads((out / "acquired" / "acquisition.json").read_text())
     assert acquisition["image_sha256"] == hashlib.sha256(image.data).hexdigest()
-    assert "100%" in capsys.readouterr().err
+    message = capsys.readouterr().err
+    assert "100%" in message
+    assert report["artifact_jsonl"] in message
+    assert "review_report" not in report
+    assert not (out / "report").exists()
+    assert not list(out.rglob("*.html"))
+    assert Path(report["artifact_sqlite"]).is_file()
 
 
 def test_each_command_can_run_independently(tmp_path, native_boundary, capsys):
@@ -274,7 +280,9 @@ def test_run_interruption_is_reported(tmp_path, monkeypatch):
     assert report["status"] == "failed" and report["error"] == "KeyboardInterrupt"
 
 
-def test_analyze_reuses_verified_acquisition_and_writes_review(tmp_path, native_boundary, capsys):
+def test_analyze_reuses_verified_acquisition_and_writes_artifacts(
+    tmp_path, native_boundary, capsys
+):
     out = tmp_path / "acquired"
     assert cli.main(["acquire", "--image", "fixture.E01", "--out", str(out)]) == 0
     manifests = capsys.readouterr().out.splitlines()
@@ -285,7 +293,13 @@ def test_analyze_reuses_verified_acquisition_and_writes_review(tmp_path, native_
     report = json.loads((tmp_path / "analysis" / "validation_summary.json").read_text())
     assert report["artifact_count"] == report["sqlite_artifact_count"] == 2
     assert report["validated_media_files"] == 0  # fixture bytes are not real WebP
-    assert (tmp_path / "analysis" / "report" / "index.html").is_file()
+    analysis = tmp_path / "analysis"
+    _check_results(analysis)
+    run = json.loads((analysis / "run.json").read_text())
+    assert "review_report" not in run
+    assert not (analysis / "report").exists()
+    assert not list(analysis.rglob("*.html"))
+    assert run["artifact_jsonl"] in capsys.readouterr().err
     assert cli.main(args) == 1  # no overwrite
 
 

@@ -103,7 +103,8 @@ def test_native_e01_pipeline(tmp_path: Path) -> None:
         for line in (out / "artifacts.jsonl").read_bytes().splitlines()
     ]
     assert len(assets) == artifact_summary["artifact_count"] == report["artifact_count"]
-    assert (out / "report" / "index.html").is_file()
+    assert "review_report" not in report
+    assert not (out / "report").exists()
     for asset in assets:
         assert asset.source_refs
         if asset.attribution == "pattern_candidate":

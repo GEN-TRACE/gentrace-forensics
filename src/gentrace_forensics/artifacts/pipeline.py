@@ -486,7 +486,7 @@ def build_profile(
 
 
 def recover_artifacts(manifests: list[Path], out: Path) -> dict[str, Any]:
-    from gentrace_forensics.artifacts.report import write_outputs
+    from gentrace_forensics.artifacts.store import write_outputs
 
     artifacts: list[Artifact] = []
     relationships: list[Relationship] = []

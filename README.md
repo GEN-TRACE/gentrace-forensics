@@ -4,7 +4,7 @@
 
 Windows E01 이미지에서 Chrome 캐시를 획득하거나, 이미 획득한 캐시를 재분석합니다.
 파일 ID·첨부·대화·작업 이력 등의 근거를 연결하고, 캐시에 남은 이미지·음성·영상·문서의
-본문을 복원합니다. 결과는 JSONL·SQLite와 로컬 HTML 보고서로 제공합니다.
+본문을 복원합니다. 결과는 JSONL·SQLite와 복원 파일로 제공합니다.
 
 파일의 입력·생성 관련 역할, 판단 근거, 복원 상태를 별도로 기록합니다.
 파일이 정상적으로 열리는 것만으로 사용자의 업로드·생성 행위를 확정하지 않습니다.
@@ -15,7 +15,6 @@ Windows E01 이미지에서 Chrome 캐시를 획득하거나, 이미 획득한 �
 - **인덱스 밖 기록 복원**: `index`에 연결된 기록뿐 아니라 `data_N`에 남은 EntryStore도 검사합니다. 헤더·키 체크섬을 검증하고 발견 방식과 블록 할당 상태를 보존합니다.
 - **파일 관련 근거 연결**: 서비스별 메타데이터와 캐시 본문을 연결해 파일 자산·미리보기·커버·작업 관계를 정리합니다. 근거가 부족한 역할은 미확정으로 남깁니다.
 - **본문 복원과 검증**: 실제 파일 형식과 지원 디코더로 검사하고, 영상 조각은 저장 범위와 누락·충돌을 확인합니다. 부분 복원을 완전한 파일과 구분합니다.
-- **오프라인 열람**: 이미지·음성·영상, 파일 다운로드, 서비스·역할·복원 상태별 필터와 출처 확인을 제공합니다. 보고서에서 외부 증거 URL로 자동 접속하지 않습니다.
 
 ## 분석 범위
 
@@ -105,7 +104,7 @@ gentrace run --image "/path/to/evidence.E01" --out outputs/case-01
 ```
 
 첫 번째 `.E01`을 지정하고 분할 세그먼트는 같은 폴더에 둡니다.
-프로필 탐색, 논리 디스크 해시 계산, 캐시 획득, 분류·정규화, 아티팩트 복원과 보고서 생성을
+프로필 탐색, 논리 디스크 해시 계산, 캐시 획득, 분류·정규화, 아티팩트 복원과 결과 저장을
 순서대로 수행합니다. 디스크 전체 해시 계산은 이미지 크기와 압축 상태에 따라 오래 걸릴 수 있습니다.
 
 ### 기존 획득본 재분석
@@ -129,17 +128,11 @@ gentrace analyze \
 
 `--out`에는 **새 결과 폴더**를 지정합니다. 기존 결과를 덮어쓰지 않습니다.
 
-### 결과 열기
+### 결과 확인
 
-완료되면 출력되는 **`<out>/report/index.html`**을 브라우저로 엽니다.
-macOS에서는 다음 명령으로 열 수 있습니다.
-
-```bash
-open outputs/case-01/report/index.html
-```
-
-파일 열람과 분석 근거 확인은 HTML 보고서에서 시작하고, 검색·후속 분석에는
-`artifacts.jsonl` 또는 `artifacts.sqlite3`를 사용합니다.
+완료되면 출력되는 **`<out>/artifacts.jsonl`**에서 파일별 근거·출처·복원 상태를 확인합니다.
+SQL 검색에는 `artifacts.sqlite3`를 사용합니다. 복원 파일은 `files/`에 저장되며,
+아티팩트 레코드의 `files[].path`는 결과 폴더를 기준으로 한 상대 경로입니다.
 
 ## 결과 파일과 해석
 
@@ -149,7 +142,6 @@ open outputs/case-01/report/index.html
 
 | 경로 | 용도 |
 |---|---|
-| `report/index.html` | 선별 아티팩트·후보의 열람, 필터, 출처·근거 확인 |
 | `artifacts.jsonl` / `artifacts.sqlite3` | 파일 자산별 역할·표현·관계·출처·복원 상태 |
 | `files/` | 내보낸 본문. 파일별 실제 형식과 검증 상태는 아티팩트 레코드에서 확인 |
 | `partial/` | 부분 복원 구간·조각 데이터. 발생한 경우 생성 |
@@ -162,7 +154,7 @@ open outputs/case-01/report/index.html
 | `run.json` | 실행 상태, 처리 단계, 입력·출력 경로, 오류 정보 |
 
 `analyze`는 기존 획득본을 참조하며 원본을 결과 폴더에 다시 복사하지 않습니다.
-보고서와 복원 파일의 상대 경로를 유지하려면 결과 폴더 전체를 함께 보관합니다.
+아티팩트 레코드와 복원 파일의 상대 경로를 유지하려면 결과 폴더 전체를 함께 보관합니다.
 원본 추적을 위해 획득본도 보관해야 하며, 절대 경로로 기록된 참조는 자료를 옮기면 재연결이 필요합니다.
 
 ### 역할과 복원 상태
@@ -192,8 +184,8 @@ open outputs/case-01/report/index.html
 | `acquire` | E01에서 캐시·네트워크 상태 획득, 프로필별 `acquired.json` 경로 출력 |
 | `classify` | 획득 매니페스트에서 캐시 파싱·분류 및 본문 보존 |
 | `normalize` | 분류 JSONL을 전체 관측 JSONL·SQLite로 변환 |
-| `analyze` | 기존 획득본 검증부터 아티팩트 복원·보고서까지 실행 |
-| `run` | E01 획득부터 아티팩트 복원·보고서까지 실행 |
+| `analyze` | 기존 획득본 검증부터 아티팩트 복원·저장까지 실행 |
+| `run` | E01 획득부터 아티팩트 복원·저장까지 실행 |
 
 ```bash
 gentrace acquire --image "/path/to/evidence.E01" --out outputs/acquired-only
@@ -201,8 +193,8 @@ gentrace classify --cache "/path/to/Default/acquired.json" --out outputs/classif
 gentrace normalize --entries outputs/classified-only/classified.jsonl --out outputs/normalized-only
 ```
 
-`classify`와 `normalize`만 실행하면 아티팩트 복원 보고서는 생성되지 않습니다.
-파일 복원과 열람이 목적이면 `run` 또는 `analyze`를 사용합니다.
+`classify`와 `normalize`만 실행하면 파일 자산 추출·복원은 수행되지 않습니다.
+파일 복원이 목적이면 `run` 또는 `analyze`를 사용합니다.
 
 오류가 발생하면 `run.json`의 실패 단계와 오류를 확인합니다(`run`·`analyze`).
 완료된 앞 단계는 보존되며 자동 재개 기능은 없습니다. 획득이 완료됐다면 해당
